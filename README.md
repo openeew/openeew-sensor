@@ -1,5 +1,5 @@
 # OpenEEW Sensor
-The OpenEEW sensor features a high performance MEMS accelerometer and ethernet or wifi connectivity. It includes also a loud buzzer and 3 bright Neopixel LEDS for alarm functions. By including alarm functions, the owners of the locations where they are installed are more likely to value and look after the device.
+The OpenEEW sensor features a high performance MEMS accelerometer and Ethernet or WiFi connectivity. It includes also a loud buzzer and 3 bright Neopixel LEDS for alarm functions. By including alarm functions, the owners of the locations where they are installed are more likely to value and look after the device.
 
 The OpenEEW sensor has already shown itself to be [as good as seismometers that cost 60x more](https://openeew.com/blog/sensor-benchmark).
 
@@ -9,7 +9,7 @@ Components are mounted in a PCB with the corresponding circuitry. The board oper
 
 ![PCB](images/pcb-openeew.PNG)
 
-You can find here the [schematics](/eagle/openeew_sensor.pdf), PCB and BOM files. The board was generated using Autodesk Eagle software.
+You can find the [schematics](/eagle/openeew_sensor.pdf), PCB, and BOM files in this repo. The board was generated using Autodesk Eagle software.
 
 ## Enclosure
 
