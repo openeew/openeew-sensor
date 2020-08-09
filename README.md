@@ -24,14 +24,8 @@ Alternatively you can buy a case that fits the board dimensions ([such as this](
 ## Firmware
 [This code](https://github.com/openeew/openeew-sensor/tree/master/firmware) allows an ESP32 device to send 3 axis accelerometer readings to a remote MQTT endpoint from its accelerometer to an MQTT endpoint. Optionally it also allows an attached NEO-6m GPS module to attach accurate time via the PPS signal (Pulse Per Second).
 
-### Operation
-In the setup we check that the accelerometer is present, calibrate it and set the ODR, LPF and RANGE. After that, we wait for the GPS to have reception. Once location is acquired it is put into a location message. Finally the device reads the flash memory for saved networks and scans to see if they match any available. If there's a match, connect, if not, start smart config. If smart config is available and was successful, save the network.
+For more details please review the [firmware instructions](https://github.com/openeew/openeew-sensor/blob/master/firmware/INSTALLATION.md).
 
-For the loop, the device checks if still connected to WiFi, if not, retry connection. When a PPS signal is present, it interrupts the system, gets the timestamp and starts a micros timer.When the interrupt coming from the ADXL is present, meaning that FIFO is full, the system takes the timestamp, and attaches the micro seconds that passed since the PPS started, giving time accuracy. Then the device reads the FIFO values, puts them into a JSON message and sends them to the udpDestination and udpPort specified in the config file. Multiple FIFOS can be concatenated in a message, number of fifos in a message can be specified in the config file.
-
-For tracking purposes the traces have a consecutive id, this is not intended for a production firmware, their purpose is to count how many traces are sent and received.
-
-For more details please review the firmware readme.
 
 
 ## Authors
