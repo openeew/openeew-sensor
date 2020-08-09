@@ -24,7 +24,7 @@ Alternatively you can buy a case that fits the board dimensions ([such as this](
 ## Firmware
 [This code](https://github.com/openeew/openeew-sensor/tree/master/firmware) allows an ESP32 device to send 3 axis accelerometer readings to a remote MQTT endpoint from its accelerometer to an MQTT endpoint. Optionally it also allows an attached NEO-6m GPS module to attach accurate time via the PPS signal (Pulse Per Second).
 
-For more details please review the [firmware instructions](https://github.com/openeew/openeew-sensor/blob/master/firmware/INSTALLATION.md).
+For more details please review the [firmware instructions](https://github.com/openeew/openeew-sensor/blob/master/firmware/README.md).
 
 
 
