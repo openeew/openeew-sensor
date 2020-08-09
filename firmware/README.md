@@ -19,7 +19,7 @@ Follow this guide to [install PlatformIO](https://docs.platformio.org/en/latest/
 Inside VSCode go to PlaformIO home, which is available on the bottom toolbar, and select `Projects`, then `Open Project`. Navigate to the root folder where you cloned this repository and open.
 
 ### Upload to an OpenEEW sensor
-Build the project using the check mark on the bottom toolbar, then uplaod using the arrow button adjacent to it. The IDE should automatically detect the board of your connnected Grillo IoT and start to write the new firmware.
+Build the project using the check mark on the bottom toolbar, then uplaod using the arrow button adjacent to it. The IDE should automatically detect the board of your connnected OpenEEW sensor and start to write the new firmware.
 
 To add the certificates and other contents of the `data` folder to the SPIFFS memory, you need to
 open tasks in the PlaformIO menubar on the left, and select `Upload File System image`:
