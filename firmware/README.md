@@ -9,9 +9,21 @@ For the loop, the device checks if still connected to WiFi, if not, retry connec
 For tracking purposes the traces have a consecutive id, this is not intended for a production firmware, their purpose is to count how many traces are sent and received.
 
 
+## Flash a new device
 
+### Install PlaformIO
 
-## Flashing
+Follow this guide to [install PlatformIO](https://docs.platformio.org/en/latest/integration/ide/vscode.html#installation) on your machine. PlaformIO offers several benefits to the Arduino IDE, particularly the ability to contain dependencies within a simple folder structure.
+
+### Open project
+Inside VSCode go to PlaformIO home, which is available on the bottom toolbar, and select `Projects`, then `Open Project`. Navigate to the root folder where you cloned this repository and open.
+
+### Upload to an OpenEEW sensor
+Build the project using the check mark on the bottom toolbar, then uplaod using the arrow button adjacent to it. The IDE should automatically detect the board of your connnected Grillo IoT and start to write the new firmware.
+
+To add the certificates and other contents of the `data` folder to the SPIFFS memory, you need to
+open tasks in the PlaformIO menubar on the left, and select `Upload File System image`:
+![](/images/platformio-spiffs.png)
 
 ### Config.h
 In the config.h file two levels of debugging can be set, first "debug" variable needs to be set true to allow serial communication and only basic status lines are part of the output. Second level is set by making LOG_L2 true, this would give specific output on the WiFi events.
