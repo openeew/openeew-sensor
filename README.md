@@ -13,6 +13,8 @@ GPS can optionally be added with a UART interface.
 
 You can find here the [schematics](/eagle/openeew_sensor.pdf), PCB and BOM files. The board was generated using Autodesk Eagle software.
 
+The assembled sensor, enclosure, and power supply, can also be bought directly [here](https://grillo.io/buy-sensor/).
+
 ## Enclosure
 
 You can [3d print yourself a sturdy wall mounted enclosure](/enclosure/) for your PCB using Fusion 360 or your favourite modelling program. This design features snap lip joints to make it easy to assemble, and flanged base for a sturdy connection to the wall surface.
