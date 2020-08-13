@@ -31,7 +31,8 @@ void readNetworkStored(int netId);
 void storeNetwork(String ssid, String pswd);
 bool readAndConnect();
 bool startSmartConfig();
-void generateMessage(String &out, long fifoData[32][3], int entryCount, char *timeObtained);
+//void generateMessage(String &out, long fifoData[32][3], int entryCount, char *timeObtained);
+void generateMessage(String &out, long fifoData[32][3], int entryCount);
 void appendArray(String &out, long fifoData[32][3], int entryCount, int index);
 
 //Objects
@@ -134,7 +135,7 @@ void setup()
   pinMode(CHIP_SELECT_PIN_ADXL, OUTPUT);
   attachInterrupt(INT_PIN, isr_adxl, FALLING);
 
-  gps_serial.begin(9600, SERIAL_8N1, 16, 17);
+  //gps_serial.begin(9600, SERIAL_8N1, 16, 17);
 
   spi1 = new SPIClass(HSPI);
   adxl355.initSPI(*spi1);
@@ -163,6 +164,8 @@ void setup()
   }
 
   DEBUG("Finished accelerometer configuration");
+
+  /*
   while (!gpsData)
   {
     while (gps_serial.available() > 0)
@@ -183,8 +186,9 @@ void setup()
       gpsData = true;
     }
   }
-
   DEBUG("Finished GPS configuration");
+
+  */
 
   if (!(connected = readAndConnect()))
   {
@@ -226,11 +230,13 @@ void loop()
     connected = readAndConnect();
   }
   //=========================== GPS Section ========================
+
+  /*
   while (gps_serial.available() > 0)
   {
     gps.encode(gps_serial.read());
   }
-
+  
   if (pps.pressed)
   {
     lastTime = micros();
@@ -256,6 +262,7 @@ void loop()
       pps.pressed = false;
     }
   }
+  
   if (gpsData && micros() - lastTime > 10000000)
   {
     gpsData = false;
@@ -265,8 +272,11 @@ void loop()
     DEBUG("GPS not available");
   }
 
+  */
+
   //====================== ADXL Accelerometer =====================
-  if (fifoFull && gpsData)
+  //if (fifoFull && gpsData)
+  if (fifoFull)
   {
     fifoFull = false;
     status = adxl355.getStatus();
@@ -274,6 +284,8 @@ void loop()
     if (status & Adxl355::STATUS_VALUES::FIFO_FULL)
     {
       //DEBUG("FIFO is full");
+
+      /*
 
       if (lastTime > rightNow)
       { //If new PPS comes between ADXL interrupt and print time creation, there would be negative time
@@ -285,6 +297,8 @@ void loop()
       sprintf(aux, "%s.%06d", timestamp, printTime);
 
       //DEBUG(aux);
+
+      */
 
       if (-1 != (numEntriesFifo = adxl355.readFifoEntries((long *)fifoOut)))
       {
@@ -308,7 +322,8 @@ void loop()
 
         numValsForAvg = min(numValsForAvg + 32, 2000);
 
-        generateMessage(traceMessage, fifoDelta, numEntriesFifo, aux);
+        //generateMessage(traceMessage, fifoDelta, numEntriesFifo, aux);
+        generateMessage(traceMessage, fifoDelta, numEntriesFifo);
 
         fifoMessage += traceMessage.c_str();
         fifoCount++;
@@ -319,7 +334,8 @@ void loop()
         }
         else
         {
-          if (gpsData && client.connected())
+          // if (gpsData && client.connected())
+          if (client.connected())
           {
             //  fifoMessage += "]},\n";
             fifoMessage += "]}\n";
@@ -581,9 +597,11 @@ bool startSmartConfig()
     return false;
   }
 }
-void generateMessage(String &out, long fifoData[32][3], int entryCount, char *timeObtained)
+//void generateMessage(String &out, long fifoData[32][3], int entryCount, char *timeObtained)
+void generateMessage(String &out, long fifoData[32][3], int entryCount)
 {
   //Serial.println((String)timeObtained);
+  /*
   char buffer[20];
   out = "\n{ \n\"t\" : " + (String)timeObtained;
   out += ",\n\"sr\": " + (String)sr;
@@ -596,6 +614,7 @@ void generateMessage(String &out, long fifoData[32][3], int entryCount, char *ti
   appendArray(out, fifoData, entryCount, 2);
 
   out += "\n}";
+  */
 }
 void appendArray(String &out, long fifoData[32][3], int entryCount, int index)
 {
