@@ -1,0 +1,9 @@
+EESchema-DOCLIB  Version 2.0
+#
+$CMP ADXL355
+D 3-Axis MEMS Accelerometer, Low Noise, Low Drift, Low Power
+K 3-axis accelerometer i2c spi mems
+F https://www.analog.com/media/en/technical-documentation/data-sheets/ADXL354_355.pdf
+$ENDCMP
+#
+#End Doc Library
