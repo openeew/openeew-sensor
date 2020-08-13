@@ -11,11 +11,11 @@ The ethernet uses the LAN8720A transceiver. We have not included PoE in this var
 
 GPS can optionally be added with a UART interface.
 
-![PCB](images/pcb-openeew.PNG)
-
 You can find the schematics, PCB, and BOM files in [here](/pcb). The board was generated using [Kicad](https://kicad-pcb.org/).
 
 The assembled sensor, enclosure, and power supply, can also be bought directly [here](https://grillo.io/buy-sensor/).
+
+![PCB](images/pcb-openeew.PNG)
 
 ## Enclosure
 
