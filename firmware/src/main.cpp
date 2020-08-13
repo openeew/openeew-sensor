@@ -77,7 +77,7 @@ void IRAM_ATTR isr_gps()
 }
 
 //ADXL Accelerometer
-int8_t CHIP_SELECT_PIN_ADXL = 5;
+int8_t CHIP_SELECT_PIN_ADXL = 15;
 int8_t INT_PIN = 2;
 Adxl355::RANGE_VALUES range = Adxl355::RANGE_VALUES::RANGE_2G;
 Adxl355::ODR_LPF odr_lpf;
@@ -136,7 +136,7 @@ void setup()
 
   gps_serial.begin(9600, SERIAL_8N1, 16, 17);
 
-  spi1 = new SPIClass(VSPI);
+  spi1 = new SPIClass(HSPI);
   adxl355.initSPI(*spi1);
 
   WiFi.onEvent(WiFiEvent);
