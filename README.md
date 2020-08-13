@@ -7,6 +7,8 @@ The OpenEEW sensor has already shown itself to be [as good as seismometers that 
 
 Components are mounted in a PCB with the corresponding circuitry. The board operates at 3.3V with a maximum current of 1A. The accelerometer is accessed via SPI interface, specifically ESP32's HSPI. For this device we have selected the ADXL355 accelerometer for its low noise and relatively low cost.
 
+The ethernet uses the LAN8720A transceiver. We have not included PoE in this varient to reduce complexity and cost, but this may be a good option for some.
+
 GPS can optionally be added with a UART interface.
 
 ![PCB](images/pcb-openeew.PNG)
