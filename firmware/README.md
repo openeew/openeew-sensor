@@ -11,6 +11,9 @@ For tracking purposes the traces have a consecutive id, this is not intended for
 
 ## Flash a new device
 
+### Setup
+You will need an FTDI device to program the device. Something like [this](https://www.aliexpress.com/item/32826575637.html?spm=a2g0o.productlist.0.0.20ef16282CTwNw&algo_pvid=97db3d99-6904-47b4-b90d-4787bd56682d&algo_expid=97db3d99-6904-47b4-b90d-4787bd56682d-5&btsid=0ab6fb8815972923937521550efbde&ws_ab_test=searchweb0_0,searchweb201602_,searchweb201603_) should work (please note I have not tested this product).
+
 ### Install PlaformIO
 
 Follow this guide to [install PlatformIO](https://docs.platformio.org/en/latest/integration/ide/vscode.html#installation) on your machine. PlaformIO offers several benefits to the Arduino IDE, particularly the ability to contain dependencies within a simple folder structure.
