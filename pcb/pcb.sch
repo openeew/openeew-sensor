@@ -1948,12 +1948,12 @@ Connection ~ 4400 7500
 Wire Wire Line
 	4400 7500 4500 7500
 Wire Wire Line
-	4500 7300 3800 7300
-Text Label 3800 7300 0    50   ~ 0
-EMAC_TXD1(RMII)
-Wire Wire Line
 	4500 7400 3800 7400
 Text Label 3800 7400 0    50   ~ 0
+EMAC_TXD1(RMII)
+Wire Wire Line
+	4500 7300 3800 7300
+Text Label 3800 7300 0    50   ~ 0
 EMAC_TXD0(RMII)
 Text Label 4150 8500 0    50   ~ 0
 PHYAD1
