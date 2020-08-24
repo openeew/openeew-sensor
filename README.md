@@ -17,6 +17,11 @@ The assembled sensor, enclosure, and power supply, can also be bought directly [
 
 ![PCB](images/pcb-openeew.PNG)
 
+Please note the following pins:
+ADXL355 > SPI (HSPI)
+Neopixel data pin> GPIO 16
+Buzzer > GPIO 32
+
 ## Enclosure
 
 You can [3d print yourself a sturdy wall mounted enclosure](/enclosure/) for your PCB using Fusion 360 or your favourite modelling program. This design features snap lip joints to make it easy to assemble, and flanged base for a sturdy connection to the wall surface.
