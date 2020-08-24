@@ -18,9 +18,9 @@ The assembled sensor, enclosure, and power supply, can also be bought directly [
 ![PCB](images/pcb-openeew.PNG)
 
 Please note the following pins:
-ADXL355 > SPI (HSPI)
-Neopixel data pin> GPIO 16
-Buzzer > GPIO 32
+- ADXL355 > SPI (HSPI)
+- Neopixel data pin> GPIO 16
+- Buzzer > GPIO 32
 
 ## Enclosure
 
