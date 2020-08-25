@@ -183,7 +183,7 @@ void setup()
 
   if (connected)
   {
-    client.begin(MQTTBrokerIp, net);
+    client.begin(MQTTBrokerIp, MQTTBrokerPort, net);
 
     while (!client.connect(deviceId))
     {
