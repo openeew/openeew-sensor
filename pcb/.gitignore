@@ -4,4 +4,3 @@
 *.kicad_pcb-bak
 pcb-cache.lib
 fp-info-cache
-pcb-backups/
