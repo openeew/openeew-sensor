@@ -586,12 +586,12 @@ bool startSmartConfig()
 void generateMessage(String &out, long fifoData[32][3], int entryCount)
 {
   //Serial.println((String)timeObtained);
-  /*
+  
   char buffer[20];
-  out = "\n{ \n\"t\" : " + (String)timeObtained;
-  out += ",\n\"sr\": " + (String)sr;
-  out += ",\n\"x\" : ";
-  //out = "{\"x\" : ";
+  //out = "\n{ \n\"t\" : " + (String)timeObtained;
+  //out += ",\n\"sr\": " + (String)sr;
+  //out += ",\n\"x\" : ";
+  out = "{\"x\" : ";
   appendArray(out, fifoData, entryCount, 0);
   out += ",\n\"y\" : ";
   appendArray(out, fifoData, entryCount, 1);
@@ -599,7 +599,7 @@ void generateMessage(String &out, long fifoData[32][3], int entryCount)
   appendArray(out, fifoData, entryCount, 2);
 
   out += "\n}";
-  */
+  
 }
 void appendArray(String &out, long fifoData[32][3], int entryCount, int index)
 {
@@ -621,4 +621,5 @@ void appendArray(String &out, long fifoData[32][3], int entryCount, int index)
   }
 
   out += "]";
+
 }
