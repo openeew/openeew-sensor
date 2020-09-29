@@ -118,7 +118,7 @@ void setup()
 
   pinMode(INT_PIN, INPUT);
   pinMode(CHIP_SELECT_PIN_ADXL, OUTPUT);
-  attachInterrupt(INT_PIN, isr_adxl, FALLING);
+  attachInterrupt(digitalPinToInterrupt(INT_PIN), isr_adxl, FALLING);
 
   //gps_serial.begin(9600, SERIAL_8N1, 16, 17);
 
