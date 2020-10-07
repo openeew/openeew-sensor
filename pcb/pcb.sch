@@ -3395,6 +3395,41 @@ Wire Wire Line
 	2950 4450 2850 4450
 Wire Wire Line
 	2850 4450 2850 4350
+Connection ~ 2850 4450
+Wire Wire Line
+	8200 1550 8500 1550
+Text Label 8500 1550 2    50   ~ 0
+TXD0
+Text Label 8500 1650 2    50   ~ 0
+RXD0
+Wire Wire Line
+	8500 1650 8200 1650
+$Comp
+L power:GND #PWR089
+U 1 1 60375E7D
+P 8500 1800
+F 0 "#PWR089" H 8500 1550 50  0001 C CNN
+F 1 "GND" H 8505 1627 50  0000 C CNN
+F 2 "" H 8500 1800 50  0001 C CNN
+F 3 "" H 8500 1800 50  0001 C CNN
+	1    8500 1800
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	8500 1800 8500 1750
+Wire Wire Line
+	8500 1750 8200 1750
+$Comp
+L Connector_Generic:Conn_01x03 J5
+U 1 1 60408528
+P 8000 1650
+F 0 "J5" H 7918 1967 50  0000 C CNN
+F 1 "DNP" H 7918 1876 50  0000 C CNN
+F 2 "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" H 8000 1650 50  0001 C CNN
+F 3 "~" H 8000 1650 50  0001 C CNN
+	1    8000 1650
+	-1   0    0    -1  
+$EndComp
 Wire Bus Line
 	7950 2200 7950 2400
 Wire Bus Line
@@ -3411,5 +3446,4 @@ Wire Bus Line
 	12050 2550 12050 3100
 Wire Bus Line
 	12450 2600 12450 4500
-Connection ~ 2850 4450
 $EndSCHEMATC
