@@ -1983,12 +1983,12 @@ $EndComp
 Wire Wire Line
 	4150 3150 4150 3100
 Wire Wire Line
-	3650 2600 3300 2600
-Text Label 3300 2600 0    50   ~ 0
-USB_D_N
-Wire Wire Line
 	4650 2600 5000 2600
 Text Label 5000 2600 2    50   ~ 0
+USB_D_N
+Wire Wire Line
+	3650 2600 3300 2600
+Text Label 3300 2600 0    50   ~ 0
 USB_D_P
 $Comp
 L Device:R_Small R15
@@ -2632,7 +2632,7 @@ $EndComp
 Text Label 2300 4750 2    30   ~ 0
 PWR_LED
 Text Label 5400 6800 0    50   ~ 0
-VDD1,2A
+VDD1_2A
 Wire Wire Line
 	2700 8350 2950 8350
 Wire Wire Line
@@ -3430,6 +3430,18 @@ F 3 "~" H 8000 1650 50  0001 C CNN
 	1    8000 1650
 	-1   0    0    -1  
 $EndComp
+Text Label 2900 2100 1    30   ~ 0
+CC2
+Text Label 3000 2100 1    30   ~ 0
+CC1
+Text Label 8250 2900 2    30   ~ 0
+D5_K
+Text Label 8450 2900 2    30   ~ 0
+D6_K
+Text Label 14100 1950 3    50   ~ 0
+ACCEL_VSUPPLY
+Text Label 3800 4550 2    30   ~ 0
+LDO_BYP
 Wire Bus Line
 	7950 2200 7950 2400
 Wire Bus Line
