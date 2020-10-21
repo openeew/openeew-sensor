@@ -3367,13 +3367,13 @@ Wire Wire Line
 	2850 4450 2850 4350
 Connection ~ 2850 4450
 Wire Wire Line
-	8200 1550 8500 1550
-Text Label 8500 1550 2    50   ~ 0
-TXD0
+	8200 1650 8500 1650
 Text Label 8500 1650 2    50   ~ 0
+TXD0
+Text Label 8500 1550 2    50   ~ 0
 RXD0
 Wire Wire Line
-	8500 1650 8200 1650
+	8500 1550 8200 1550
 $Comp
 L power:GND #PWR089
 U 1 1 60375E7D
