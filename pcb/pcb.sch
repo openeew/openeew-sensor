@@ -758,8 +758,6 @@ Wire Wire Line
 Wire Wire Line
 	2250 8550 2850 8550
 Wire Wire Line
-	1450 8550 1250 8550
-Wire Wire Line
 	1450 8450 1250 8450
 Wire Wire Line
 	1450 9050 1250 9050
@@ -853,8 +851,6 @@ Wire Wire Line
 	2800 8850 2850 8850
 Text Label 1250 8450 0    50   ~ 0
 AG1
-Text Label 1250 8550 0    50   ~ 0
-KG1
 Text Label 1250 9050 0    50   ~ 0
 KY1
 Text Label 1250 9150 0    50   ~ 0
@@ -3492,20 +3488,72 @@ Wire Wire Line
 	7800 8600 7800 9000
 Text Label 5800 3000 0    30   ~ 0
 VBUS_DETECT
+Wire Wire Line
+	1100 9550 1100 9350
+Text Label 1100 9350 3    50   ~ 0
+KY1
+Wire Wire Line
+	7400 6800 7150 6800
+Connection ~ 7150 6800
+$Comp
+L power:GND #PWR?
+U 1 1 5FA8A074
+P 1100 9800
+F 0 "#PWR?" H 1100 9550 50  0001 C CNN
+F 1 "GND" H 1105 9627 50  0000 C CNN
+F 2 "" H 1100 9800 50  0001 C CNN
+F 3 "" H 1100 9800 50  0001 C CNN
+	1    1100 9800
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	1100 9750 1100 9800
+$Comp
+L Device:R_Small R?
+U 1 1 5FA88174
+P 1100 9650
+F 0 "R?" H 1159 9696 50  0000 L CNN
+F 1 "1k" H 1159 9605 50  0000 L CNN
+F 2 "Resistor_SMD:R_0402_1005Metric" H 1100 9650 50  0001 C CNN
+F 3 "~" H 1100 9650 50  0001 C CNN
+	1    1100 9650
+	1    0    0    -1  
+$EndComp
+Text Label 1250 8550 0    50   ~ 0
+KG1
+Wire Wire Line
+	1450 8550 1250 8550
+Wire Wire Line
+	7400 6950 7400 6800
+Text Label 7400 7350 1    50   ~ 0
+AG1
+Wire Wire Line
+	7400 7150 7400 7350
 Wire Bus Line
 	7950 2200 7950 2400
 Wire Bus Line
 	11850 2200 11850 2450
 Wire Bus Line
+	12050 2550 12050 3100
+Wire Bus Line
+	12450 2600 12450 4500
+Wire Bus Line
 	10400 8750 10400 8950
 Wire Bus Line
 	9400 3600 9400 4100
 Wire Bus Line
-	11850 4400 11850 5000
-Wire Bus Line
 	12200 8300 12200 8600
 Wire Bus Line
-	12050 2550 12050 3100
-Wire Bus Line
-	12450 2600 12450 4500
+	11850 4400 11850 5000
+$Comp
+L Device:R_Small R?
+U 1 1 5FADE3A5
+P 7400 7050
+F 0 "R?" H 7459 7096 50  0000 L CNN
+F 1 "1k" H 7459 7005 50  0000 L CNN
+F 2 "Resistor_SMD:R_0402_1005Metric" H 7400 7050 50  0001 C CNN
+F 3 "~" H 7400 7050 50  0001 C CNN
+	1    7400 7050
+	1    0    0    -1  
+$EndComp
 $EndSCHEMATC
