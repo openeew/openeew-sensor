@@ -45,6 +45,7 @@ For more details please review the [firmware instructions](https://github.com/op
 ## Authors
 
 - **Grillo** - _Initial work_ - [Grillo](https://grillo.io)
+- John Walicki - Watson IoT - [John Walicki](http://github.com/johnwalicki)
 
 Enjoy! Give us [feedback](https://github.com/openeew/openeew-sensor/issues) if you have suggestions on how to improve this information.
 
