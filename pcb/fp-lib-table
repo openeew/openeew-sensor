@@ -3,4 +3,5 @@
   (lib (name Package_LCC_local)(type KiCad)(uri ${KIPRJMOD}/local/modules/Package_LCC_local.pretty)(options "")(descr ""))
   (lib (name Connector_JST_local)(type KiCad)(uri ${KIPRJMOD}/local/modules/Connector_JST_local.pretty)(options "")(descr ""))
   (lib (name Package_TO_SOT_SMD_local)(type KiCad)(uri ${KIPRJMOD}/local/modules/Package_TO_SOT_SMD_local.pretty)(options "")(descr ""))
+  (lib (name Symbol_local)(type KiCad)(uri ${KIPRJMOD}/local/modules/Symbol_local.pretty)(options "")(descr ""))
 )
