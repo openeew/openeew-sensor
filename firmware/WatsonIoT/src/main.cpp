@@ -2,6 +2,7 @@
 #include <WiFiClientSecure.h>
 #include <ETH.h>
 #include <time.h>
+#include <Preferences.h>
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
 #include <Adxl355.h>
@@ -31,10 +32,6 @@ char deviceID[13];
 #define TZ_OFFSET -5  // (EST) Hours timezone offset to GMT (without daylight saving time)
 #define TZ_DST    60  // Minutes timezone offset for Daylight saving
 
-// Add WiFi connection information in config.h
-//char ssid[] = "<SSID>";  // your network SSID (name)
-//char pass[] = "<PASSWORD>";  // your network password
-
 // MQTT objects
 void callback(char* topic, byte* payload, unsigned int length);
 WiFiClientSecure wifiClient;
@@ -56,7 +53,13 @@ PubSubClient mqtt(MQTT_HOST, MQTT_PORT, callback, wifiClient);
 // Pin# of the I²C IO signal for the Ethernet PHY
 #define ETH_MDIO_PIN    18
 
+// Network variables
+Preferences prefs;
+String _ssid;    // your network SSID (name) - loaded from NVM
+String _pswd;    // your network password    - loaded from NVM
+int networksStored;
 static bool eth_connected = false;
+static bool wificonnected = false;
 
 // variables to hold accelerometer data
 StaticJsonDocument<100> jsonReceiveDoc;
@@ -94,6 +97,16 @@ SPIClass *spi1 = NULL;
 double sr = 0;
 
 // --------------------------------------------------------------------------------------------
+// SmartConfig
+int  numScannedNetworks();
+int  numNetworksStored();
+void readNetworkStored(int netId);
+void storeNetwork(String ssid, String pswd);
+bool WiFiScanAndConnect();
+bool startSmartConfig();
+
+// --------------------------------------------------------------------------------------------
+
 void IRAM_ATTR isr_adxl() {
   fifoFull = true;
   //fifoCount++;
@@ -106,16 +119,16 @@ void StartADXL355() {
 
   if (adxl355.isDeviceRecognized()) {
     deviceRecognized = true;
-    DEBUG("Initializing sensor");
+    Serial.println("Initializing sensor");
     adxl355.initializeSensor(range, odr_lpf, debug);
-    DEBUG("Calibrating sensor");
+    Serial.println("Calibrating sensor");
     adxl355.calibrateSensor(5, debug);
-    DEBUG("ADXL355 Accelerometer activated");
+    Serial.println("ADXL355 Accelerometer activated");
   }
   else {
-    DEBUG("Unable to get accelerometer");
+    Serial.println("Unable to get accelerometer");
   }
-  DEBUG("Finished accelerometer configuration");
+  Serial.println("Finished accelerometer configuration");
 }
 
 
@@ -124,12 +137,12 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] : ");
-
+  
   payload[length] = 0; // ensure valid content is zero terminated so can treat as c-string
   Serial.println((char *)payload);
   DeserializationError err = deserializeJson(jsonReceiveDoc, (char *)payload);
   if (err) {
-    Serial.print(F("deserializeJson() failed with code : "));
+    Serial.print(F("deserializeJson() failed with code : ")); 
     Serial.println(err.c_str());
   } else {
     JsonObject cmdData = jsonReceiveDoc.as<JsonObject>();
@@ -141,7 +154,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
       // Set the ADXL355 Sample Rate
       int32_t NewSampleRate = 0;
       bool    SampleRateChanged = false ;
-
+      
       NewSampleRate = cmdData["SampleRate"].as<int32_t>(); // this form allows you specify the type of the data you want from the JSON object
       if( NewSampleRate == 31 ) {
         // Requested sample rate of 31 is valid
@@ -160,14 +173,14 @@ void callback(char* topic, byte* payload, unsigned int length) {
       }
 
       Serial.print("ADXL355 Sample Rate has been changed:");
-      Serial.println(Adxl355SampleRate);
+      Serial.println( Adxl355SampleRate );
       //SampleRateChanged = false;
-      DEBUG(SampleRateChanged) ;
+      Serial.println( SampleRateChanged ) ;
       if( SampleRateChanged ) {
-        DEBUG("Changing the ADXL355 Sample Rate");
+        Serial.println("Changing the ADXL355 Sample Rate");
         adxl355.stop();
         delay(1000);
-        DEBUG("Restarting");
+        Serial.println("Restarting");
         StartADXL355();
       }
       jsonReceiveDoc.clear();
@@ -183,7 +196,7 @@ void Connect2MQTTbroker() {
     // Attempt to connect / re-connect to IBM Watson IoT Platform
     // These are globals set in setup()
     if( mqtt.connect(MQTT_DEVICEID, MQTT_USER, MQTT_TOKEN) ) {
-  //if( mqtt.connect(MQTT_DEVICEID) ) { // No Token Authentication
+  //if( mqtt.connect(MQTT_DEVICEID) ) { // No Token Authentication      
       Serial.println("MQTT Connected");
       mqtt.subscribe(MQTT_TOPIC_ALARM);
       mqtt.subscribe(MQTT_TOPIC_SAMPLERATE);
@@ -199,25 +212,34 @@ void Connect2MQTTbroker() {
 void NetworkEvent(WiFiEvent_t event) {
   switch (event) {
     case SYSTEM_EVENT_WIFI_READY:    // 0
-      Serial.println("ESP32 WiFi ready");
+      Serial.println("ESP32 WiFi interface ready");
       break;
     case SYSTEM_EVENT_STA_START:     // 2
-      Serial.println("ESP32 station start");
+      Serial.println("ESP32 WiFi started");
       break;
+    case SYSTEM_EVENT_SCAN_DONE:
+      Serial.println("Completed scan for access points");
+      break;      
     case SYSTEM_EVENT_STA_CONNECTED: // 4
-      Serial.println("ESP32 station connected to AP");
+      Serial.println("ESP32 WiFi connected to AP");
+      WiFi.setHostname("openeew-sensor-wifi");
       break;
+    case SYSTEM_EVENT_STA_DISCONNECTED:
+      Serial.println("Disconnected from WiFi access point");
+      wificonnected = false;
+      break;      
     case SYSTEM_EVENT_STA_GOT_IP:    // 7
       Serial.println("ESP32 station got IP from connected AP");
-      if( !eth_connected ) {
-        Serial.println("Should I connect to the MQTT broker here?");
+      Serial.print("Obtained IP address: ");
+      Serial.println( WiFi.localIP() );
+      if( eth_connected ) {
+        Serial.println("Ethernet is already connected");
       }
       break;
     case SYSTEM_EVENT_ETH_START:
       Serial.println("ETH Started");
       //set eth / wifi hostname here
       ETH.setHostname( "openeew-sensor-eth" );
-      WiFi.setHostname("openeew-sensor-wifi");
       break;
     case SYSTEM_EVENT_ETH_CONNECTED:
       Serial.println("ETH Connected");
@@ -245,7 +267,7 @@ void NetworkEvent(WiFiEvent_t event) {
         // Handled at a lower level?
         // mqtt.setClient(ETH); // Fails. wifiClient might still be valid
         Connect2MQTTbroker();
-      }
+      }  
       break;
     case SYSTEM_EVENT_ETH_DISCONNECTED:
       Serial.println("ETH Disconnected");
@@ -259,6 +281,15 @@ void NetworkEvent(WiFiEvent_t event) {
       Serial.println("ETH Stopped");
       eth_connected = false;
       break;
+    case SYSTEM_EVENT_STA_STOP:
+      Serial.println("WiFi Stopped");
+      break;
+    case SYSTEM_EVENT_AP_STOP:
+      Serial.println("ESP32 soft-AP stop");
+      break;
+    case SYSTEM_EVENT_AP_STACONNECTED:
+      Serial.println("a station connected to ESP32 soft-AP");
+      break;
     default:
       Serial.print("Unhandled Network Interface event : ");
       Serial.println(event);
@@ -267,7 +298,7 @@ void NetworkEvent(WiFiEvent_t event) {
 }
 
 
-// MQTT SSL requires a relatively accurate time between broker and client
+// MQTT SSL requires a relatively accurate time between broker and client 
 void SetTimeESP32() {
   // Set time from NTP servers
   configTime(TZ_OFFSET * 3600, TZ_DST * 60, "pool.ntp.org", "0.pool.ntp.org");
@@ -303,13 +334,20 @@ void setup() {
   // Start WiFi connection
   WiFi.onEvent(NetworkEvent);
   WiFi.mode(WIFI_STA);
+
+  wificonnected = WiFiScanAndConnect();
+  if( !wificonnected )  {
+    startSmartConfig();
+  }
+  Serial.println("WiFi Connected");
+
   byte mac[6];                     // the MAC address of your Wifi shield
   WiFi.macAddress(mac);
 
   // Output this ESP32 Unique WiFi MAC Address
   Serial.print("WiFi MAC: ");
   Serial.println(WiFi.macAddress());
-
+  
   // Start the ETH interface
   ETH.begin(ETH_ADDR, ETH_POWER_PIN, ETH_MDC_PIN, ETH_MDIO_PIN, ETH_TYPE, ETH_CLK_MODE);
   Serial.print("ETH  MAC: ");
@@ -322,20 +360,12 @@ void setup() {
   // Dynamically build the MQTT Device ID from the Mac Address of this ESP32
   sprintf(MQTT_DEVICEID,"d:%s:%s:%02X%02X%02X%02X%02X%02X",MQTT_ORGID,MQTT_DEVICETYPE,mac[5],mac[4],mac[3],mac[2],mac[1],mac[0]);
   Serial.println(MQTT_DEVICEID);
-
+  
   sprintf(MQTT_HOST,"%s.messaging.internetofthings.ibmcloud.com",MQTT_ORGID);
 
   char mqttparams[100]; // Allocate a buffer large enough for this string ~95 chars
   sprintf(mqttparams, "MQTT_USER:%s  MQTT_TOKEN:%s  MQTT_DEVICEID:%s", MQTT_USER, MQTT_TOKEN, MQTT_DEVICEID);
   Serial.println(mqttparams);
-
-  WiFi.begin(ssid, pass);
-  while( (WiFi.status() != WL_CONNECTED) ) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("");
-  Serial.println("WiFi Connected");
 
   // Set the time on the ESP32
   SetTimeESP32();
@@ -383,12 +413,12 @@ void loop() {
   mqtt.loop();
   // Confirm Connection to MQTT - IBM Watson IoT Platform
   Connect2MQTTbroker();
-
+  
   //====================== ADXL Accelerometer =====================
   if (fifoFull)  {
     fifoFull = false;
     adxstatus = adxl355.getStatus();
-
+    
     if (adxstatus & Adxl355::STATUS_VALUES::FIFO_FULL) {
       if (-1 != (numEntriesFifo = adxl355.readFifoEntries((long *)fifoOut))) {
         sumFifo[0] = 0;
@@ -411,13 +441,13 @@ void loop() {
         // Generate an array of json objects that contain x,y,z arrays of 32 floats.
         // [{"x":[],"y":[],"z":[]},{"x":[],"y":[],"z":[]}]
         JsonObject acceleration = traces.createNestedObject();
-
+        
         // [{"x":[9.479,0],"y":[0.128,-1.113],"z":[-0.185,123.321]},{"x":[9.479,0],"y":[0.128,-1.113],"z":[-0.185,123.321]}]
         double gal;
         for (int i = 0; i < numEntriesFifo; i++) {
           gal = adxl355.valueToGals(fifoDelta[i][0]);
           acceleration["x"].add(round(gal*1000)/1000);
-
+          
           gal = adxl355.valueToGals(fifoDelta[i][1]);
           acceleration["y"].add(round(gal*1000)/1000);
 
@@ -425,7 +455,7 @@ void loop() {
           acceleration["z"].add(round(gal*1000)/1000);
         }
         //serializeJson(traces, Serial);
-        //DEBUG("");
+        //Serial.println("");
         fifoCount++;
 
         if (fifoCount < MAX_FIFO_COUNT) {
@@ -449,7 +479,7 @@ void loop() {
           if (!mqtt.publish(MQTT_TOPIC, msg)) {
             Serial.println("MQTT Publish failed");
           }
-
+          
           // Reset fifoCount and fifoMessage
           fifoCount = 0;
           id++;
@@ -459,5 +489,172 @@ void loop() {
         }
       }
     }
+  }
+}
+
+
+//================================= WiFi Handling ================================
+//Scan networks in range and return how many are they.
+int numScannedNetworks() {
+  int n = WiFi.scanNetworks();
+  Serial.println("WiFi Network scan done");
+  if (n == 0)  {
+    Serial.println("No networks found");
+  }
+  else {
+    Serial.print(n);
+    Serial.println(" network(s) found");
+//#if LOG_L2
+    for (int i = 0; i < n; ++i) {
+      // Print SSID and RSSI for each network found
+      Serial.print(i + 1);
+      Serial.print(": ");
+      Serial.print(WiFi.SSID(i));
+      Serial.print(" (");
+      Serial.print(WiFi.RSSI(i));
+      Serial.print(")");
+      Serial.println((WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? " " : "*");
+      delay(10);
+    }
+//#endif
+  }
+  return n;
+}
+
+//Return how many networks are stored in the NVM
+int numNetworksStored() {
+  prefs.begin("networks", true);
+  networksStored = prefs.getInt("num_nets");
+  Serial.print("Stored networks : ");
+  Serial.println(networksStored);
+  prefs.end();
+
+  return networksStored;
+}
+
+//Each network as an id so reading the network stored with said ID.
+void readNetworkStored(int netId)
+{
+  Serial.println("Reading stored networks from NVM");
+
+  prefs.begin("networks", true);
+  String idx;
+  idx = "SSID" + (String)netId;
+  _ssid = prefs.getString(idx.c_str(), "");
+  idx = "key" + (String)netId;
+  _pswd = prefs.getString(idx.c_str(), "");
+  prefs.end();
+
+  Serial.print("Found network ");
+  Serial.print(_ssid);
+  Serial.print(" , ");
+  Serial.println(_pswd);
+}
+
+//Save a pair of SSID and PSWD to NVM
+void storeNetwork(String ssid, String pswd)
+{
+  Serial.print("Writing network to NVM: ");
+  Serial.print(ssid);
+  Serial.print(",");
+  Serial.println(pswd);
+
+  prefs.begin("networks", false);
+  int aux_num_nets = prefs.getInt("num_nets");
+  Serial.print("Stored networks in NVM: ");
+  Serial.println(aux_num_nets);
+  aux_num_nets++;
+  String idx;
+  idx = "SSID" + (String)aux_num_nets;
+  prefs.putString(idx.c_str(), ssid);
+  idx = "key" + (String)aux_num_nets;
+  prefs.putString(idx.c_str(), pswd);
+  prefs.putInt("num_nets", aux_num_nets);
+  prefs.end();
+  Serial.print("Device has ");
+  Serial.print(aux_num_nets);
+  Serial.println(" networks stored in NVM");
+}
+
+//Joins the previous functions, gets the stored networks and compares to the available, if there is a match and connects, return true
+//if no match or unable to connect, return false.
+bool WiFiScanAndConnect()
+{
+  int num_nets = numNetworksStored();
+  int num_scan = numScannedNetworks();
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_STA);
+
+  for (int i = 1; i < (num_nets + 1); i++) {
+    readNetworkStored(i);
+
+    for (int j = 0; j < num_scan; j++) {
+      if (_ssid == WiFi.SSID(j)) {
+        //Serial.print("Status from connection attempt");
+        WiFi.begin(_ssid.c_str(), _pswd.c_str());
+        WiFi.setSleep(false);
+        unsigned long t0 = millis();
+
+        while (WiFi.status() != WL_CONNECTED && (millis() - t0) < CONNECTION_TO) {
+          delay(1000);
+        }
+        if (WiFi.status() == WL_CONNECTED) {
+          Serial.println("WiFi was successfully connected");
+          return true;
+        }
+        else {
+          Serial.println("There was a problem connecting to WiFi");
+        }
+      }
+      else {
+        Serial.println("Got no match for network");
+      }
+    }
+  }
+  Serial.println("Found no matches for saved networks");
+  return false;
+}
+
+// Executes the Smart config routine and if connected, will save the network for future use
+bool startSmartConfig()
+{
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.beginSmartConfig();
+
+  // Wait for SmartConfig packet from mobile
+  Serial.println("Waiting for SmartConfig.");
+  while( !WiFi.smartConfigDone() || eth_connected ) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  if( eth_connected ) {
+    // Ethernet cable was connected during or before SmartConfig
+    // Skip SmartConfig
+    return true;
+  }
+  Serial.println("SmartConfig received.");
+
+  // Wait for WiFi to connect to AP
+  Serial.println("Waiting for WiFi");
+  unsigned long t0 = millis();
+  while( WiFi.status() != WL_CONNECTED && (millis() - t0) < CONNECTION_TO)  {
+    delay(500);
+    Serial.print(".");
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    _ssid = WiFi.SSID();
+    _pswd = WiFi.psk();
+    Serial.print("Smart Config done, connected to: ");
+    Serial.print(_ssid);
+    Serial.print(" with psswd: ");
+    Serial.println(_pswd);
+    storeNetwork(_ssid, _pswd);
+    return true;
+  }
+  else {
+    Serial.println("Something went wrong with SmartConfig");
+    return false;
   }
 }
