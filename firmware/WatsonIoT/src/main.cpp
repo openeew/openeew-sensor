@@ -5,28 +5,31 @@
 #include <Preferences.h>
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
+#include <HTTPClient.h>
 #include <Adxl355.h>
 #include <math.h>
 #include "config.h"
+#include "semver.h"  // from https://github.com/h2non/semver.c
 
 // --------------------------------------------------------------------------------------------
 //        UPDATE CONFIGURATION TO MATCH YOUR ENVIRONMENT
 // --------------------------------------------------------------------------------------------
+#define OPENEEW_ACTIVATION_ENDPOINT "https://openeew-earthquakes.mybluemix.net/activation?ver=1"
+#define OPENEEW_FIRMWARE_VERSION    "1.0.0"
 
 // Watson IoT connection details
-static char MQTT_HOST[48];  // ORGID.messaging.internetofthings.ibmcloud.com
-//#define MQTT_PORT 1883
-#define MQTT_PORT 8883      // Secure MQTT
-char MQTT_DEVICEID[30];     // Allocate a buffer large enough for "d:orgid:devicetype:deviceid"
-char deviceID[13];
-#define MQTT_ORGID       "abcdef"     // Watson IoT 6 character orgid
-#define MQTT_TOKEN       "secret-password-here"   // Watson IoT DeviceId authentication token
+static char MQTT_HOST[48];            // ORGID.messaging.internetofthings.ibmcloud.com
+static char MQTT_DEVICEID[30];        // Allocate a buffer large enough for "d:orgid:devicetype:deviceid"
+static char MQTT_ORGID[7];            // Watson IoT 6 character orgid
+#define MQTT_PORT        8883         // Secure MQTT 8883 / Insecure MQTT 1833
+#define MQTT_TOKEN       "W0rkSh0p"   // Watson IoT DeviceId authentication token  
 #define MQTT_DEVICETYPE  "OpenEEW"    // Watson IoT DeviceType
 #define MQTT_USER        "use-token-auth"
 #define MQTT_TOPIC       "iot-2/evt/status/fmt/json"
 #define MQTT_TOPIC_ALARM "iot-2/cmd/earthquake/fmt/json"
 #define MQTT_TOPIC_SAMPLERATE "iot-2/cmd/samplerate/fmt/json"
 #define MQTT_TOPIC_DEVICES "iot-2/evt/status/fmt/json"
+char deviceID[13];
 
 // Timezone info
 #define TZ_OFFSET -5  // (EST) Hours timezone offset to GMT (without daylight saving time)
@@ -190,6 +193,107 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
 }
 
+bool FirmwareVersionCheck( char *firmware_latest );
+bool FirmwareVersionCheck( char *firmware_latest ) {
+  semver_t current_version = {};
+  semver_t latest_version = {};
+  char VersionCheck[48];
+
+  if (semver_parse(OPENEEW_FIRMWARE_VERSION, &current_version)
+    || semver_parse(firmware_latest, &latest_version)) {
+    Serial.println("Invalid semver string");
+    return false;
+  }
+
+  int resolution = semver_compare(latest_version, current_version);
+
+  if (resolution == 0) {
+    sprintf(VersionCheck,"Version %s is equal to: %s", firmware_latest, OPENEEW_FIRMWARE_VERSION);
+  }
+  else if (resolution == -1) {
+    sprintf(VersionCheck,"Version %s is lower than: %s", firmware_latest, OPENEEW_FIRMWARE_VERSION);
+  }
+  else {
+    // OTA upgrade is required
+    sprintf(VersionCheck,"Version %s is higher than: %s", firmware_latest, OPENEEW_FIRMWARE_VERSION);
+  }
+  Serial.println(VersionCheck);
+
+  // Free allocated memory when we're done
+  semver_free(&current_version);
+  semver_free(&latest_version);
+  return true;
+}
+
+// Call the OpenEEW Device Activation endpoint to retrieve MQTT OrgID
+void OpenEEWDeviceActivation();
+void OpenEEWDeviceActivation() {
+  // OPENEEW_ACTIVATION_ENDPOINT "https://openeew-earthquakes.mybluemix.net/activation?ver=1"
+  // $ curl -i  -X POST -d '{"macaddress":"112233445566","lat":40,"lng":-74,"firmware_device":"1.0.0"}' 
+  //    -H "Content-type: application/JSON" https://openeew-earthquakes.mybluemix.net/activation?ver=1
+
+  HTTPClient http;
+
+  // Domain name with URL path or IP address with path
+  http.begin( OPENEEW_ACTIVATION_ENDPOINT );
+
+   // HTTP request with a content type: application/json
+  http.addHeader("Content-Type", "application/json");
+  
+  // Construct the serialized http request body
+  // '{"macaddress":"112233445566","lat":40,"lng":-74,"firmware_device":"1.0.0"}'
+  StaticJsonDocument<80> httpSendDoc;
+  String httpRequestData;
+  httpSendDoc["macaddress"] = deviceID;
+  httpSendDoc["lat"] = 40.979671;
+  httpSendDoc["lng"] = -74.119179;
+  httpSendDoc["firmware_device"] = OPENEEW_FIRMWARE_VERSION;
+  // Serialize the entire string to be transmitted
+  serializeJson(httpSendDoc, httpRequestData);
+/*
+  String httpRequestData = "{\"macaddress\":\"" ;
+  httpRequestData += deviceID;
+  httpRequestData += "\",\"lat\":\"40.979671\",\"lng\":\"-74.119179\",\"firmware_device\":\"";
+  httpRequestData += OPENEEW_FIRMWARE_VERSION ;
+  httpRequestData += "\"}";
+*/  
+  Serial.println(httpRequestData);
+
+  int httpResponseCode = http.POST(httpRequestData);
+
+  // Get the response payload
+  // Ex {"org":"5yrusp","firmware_latest":"1.1.0","firmware_ota_url":"https://download.firmware.com/openeew.bin"}
+  String payload = http.getString();
+  Serial.print("HTTP post response payload: ");
+  Serial.println( payload );
+
+  Serial.print("HTTP Response code: ");
+  Serial.println(httpResponseCode);
+  
+  DynamicJsonDocument ReceiveDoc(200);
+  DeserializationError err = deserializeJson(ReceiveDoc, payload );
+  if (err) {
+    Serial.print(F("deserializeJson() failed with code : ")); 
+    Serial.println(err.c_str());
+  } else {
+    JsonObject ActivationData = ReceiveDoc.as<JsonObject>();
+    char firmware_latest[10];
+    String firmware_ota_url;
+
+    strncpy(MQTT_ORGID, ActivationData["org"], sizeof(MQTT_ORGID) );
+    Serial.print("OpenEEW Device Activation directs MQTT data from this sensor to :");
+    Serial.println(MQTT_ORGID);
+
+    strncpy(firmware_latest, ActivationData["firmware_latest"], sizeof(firmware_latest) );
+    firmware_ota_url = ActivationData["firmware_ota_url"].as<String>();
+    FirmwareVersionCheck(firmware_latest);
+  }
+
+  // Free resources
+  http.end();
+}
+
+
 void Connect2MQTTbroker() {
   while (!mqtt.connected()) {
     Serial.print("Attempting MQTT connection...");
@@ -208,6 +312,7 @@ void Connect2MQTTbroker() {
     }
   }
 }
+
 
 void NetworkEvent(WiFiEvent_t event) {
   switch (event) {
@@ -357,7 +462,14 @@ void setup() {
   sprintf(deviceID,"%02X%02X%02X%02X%02X%02X",mac[5],mac[4],mac[3],mac[2],mac[1],mac[0]);
   Serial.println(deviceID);
 
+  // Set the time on the ESP32
+  SetTimeESP32();
+
+  // Call the Activation endpoint to retrieve this OpenEEW Sensor details
+  OpenEEWDeviceActivation();
+
   // Dynamically build the MQTT Device ID from the Mac Address of this ESP32
+  // MQTT_ORGID was retreived by the OpenEEWDeviceActivation() function
   sprintf(MQTT_DEVICEID,"d:%s:%s:%02X%02X%02X%02X%02X%02X",MQTT_ORGID,MQTT_DEVICETYPE,mac[5],mac[4],mac[3],mac[2],mac[1],mac[0]);
   Serial.println(MQTT_DEVICEID);
   
@@ -366,9 +478,6 @@ void setup() {
   char mqttparams[100]; // Allocate a buffer large enough for this string ~95 chars
   sprintf(mqttparams, "MQTT_USER:%s  MQTT_TOKEN:%s  MQTT_DEVICEID:%s", MQTT_USER, MQTT_TOKEN, MQTT_DEVICEID);
   Serial.println(mqttparams);
-
-  // Set the time on the ESP32
-  SetTimeESP32();
 
   // Connect to MQTT - IBM Watson IoT Platform
   Connect2MQTTbroker();
