@@ -669,7 +669,8 @@ void readNetworkStored(int netId)
   Serial.print("Found network ");
   Serial.print(_ssid);
   Serial.print(" , ");
-  Serial.println(_pswd);
+  DEBUG_L2(_pswd);  // off by default 
+  Serial.println("xxxxxx");
 }
 
 //Save a pair of SSID and PSWD to NVM
@@ -770,7 +771,8 @@ bool startSmartConfig()
     Serial.print("Smart Config done, connected to: ");
     Serial.print(_ssid);
     Serial.print(" with psswd: ");
-    Serial.println(_pswd);
+    Serial.println("xxxxxx");
+    DEBUG_L2(_pswd)  // off by default
     storeNetwork(_ssid, _pswd);
     return true;
   }
