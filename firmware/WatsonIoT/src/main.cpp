@@ -194,10 +194,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
 }
 
 bool FirmwareVersionCheck( char *firmware_latest );
-bool FirmwareVersionCheck( char *firmware_latest ) {
+bool FirmwareVersionCheck( char *firmware_latest, String firmware_ota_url ) {
   semver_t current_version = {};
   semver_t latest_version = {};
   char VersionCheck[48];
+  bool bFirmwareUpdateRequiredOTA = false;
 
   if (semver_parse(OPENEEW_FIRMWARE_VERSION, &current_version)
     || semver_parse(firmware_latest, &latest_version)) {
@@ -214,26 +215,34 @@ bool FirmwareVersionCheck( char *firmware_latest ) {
     sprintf(VersionCheck,"Version %s is lower than: %s", firmware_latest, OPENEEW_FIRMWARE_VERSION);
   }
   else {
-    // OTA upgrade is required
     sprintf(VersionCheck,"Version %s is higher than: %s", firmware_latest, OPENEEW_FIRMWARE_VERSION);
+    bFirmwareUpdateRequiredOTA = true;
   }
   Serial.println(VersionCheck);
 
+  if( bFirmwareUpdateRequiredOTA ) {
+    // OTA upgrade is required
+    Serial.println("An OTA upgrade is required. Download the new OpenEEW firmware :");
+    Serial.println(firmware_ota_url);
+    // Launch an OTA upgrade here...
+  }
   // Free allocated memory when we're done
   semver_free(&current_version);
   semver_free(&latest_version);
   return true;
 }
 
+
 // Call the OpenEEW Device Activation endpoint to retrieve MQTT OrgID
-void OpenEEWDeviceActivation();
-void OpenEEWDeviceActivation() {
+bool OpenEEWDeviceActivation();
+bool OpenEEWDeviceActivation() {
   // OPENEEW_ACTIVATION_ENDPOINT "https://openeew-earthquakes.mybluemix.net/activation?ver=1"
   // $ curl -i  -X POST -d '{"macaddress":"112233445566","lat":40,"lng":-74,"firmware_device":"1.0.0"}' 
   //    -H "Content-type: application/JSON" https://openeew-earthquakes.mybluemix.net/activation?ver=1
+  Serial.println("Contacting the OpenEEW Device Activation Endpoint :");
+  Serial.println(OPENEEW_ACTIVATION_ENDPOINT);
 
   HTTPClient http;
-
   // Domain name with URL path or IP address with path
   http.begin( OPENEEW_ACTIVATION_ENDPOINT );
 
@@ -250,47 +259,47 @@ void OpenEEWDeviceActivation() {
   httpSendDoc["firmware_device"] = OPENEEW_FIRMWARE_VERSION;
   // Serialize the entire string to be transmitted
   serializeJson(httpSendDoc, httpRequestData);
-/*
-  String httpRequestData = "{\"macaddress\":\"" ;
-  httpRequestData += deviceID;
-  httpRequestData += "\",\"lat\":\"40.979671\",\"lng\":\"-74.119179\",\"firmware_device\":\"";
-  httpRequestData += OPENEEW_FIRMWARE_VERSION ;
-  httpRequestData += "\"}";
-*/  
   Serial.println(httpRequestData);
 
   int httpResponseCode = http.POST(httpRequestData);
 
-  // Get the response payload
-  // Ex {"org":"5yrusp","firmware_latest":"1.1.0","firmware_ota_url":"https://download.firmware.com/openeew.bin"}
-  String payload = http.getString();
-  Serial.print("HTTP post response payload: ");
-  Serial.println( payload );
-
   Serial.print("HTTP Response code: ");
   Serial.println(httpResponseCode);
-  
-  DynamicJsonDocument ReceiveDoc(200);
-  DeserializationError err = deserializeJson(ReceiveDoc, payload );
-  if (err) {
-    Serial.print(F("deserializeJson() failed with code : ")); 
-    Serial.println(err.c_str());
-  } else {
-    JsonObject ActivationData = ReceiveDoc.as<JsonObject>();
-    char firmware_latest[10];
-    String firmware_ota_url;
+  if( httpResponseCode == 200 ) {  // Success
+    // Get the response payload
+    // Ex {"org":"5yrusp","firmware_latest":"1.1.0","firmware_ota_url":"https://download.firmware.com/openeew.bin"}
+    String payload = http.getString();
+    Serial.print("HTTP post response payload: ");
+    Serial.println( payload );
 
-    strncpy(MQTT_ORGID, ActivationData["org"], sizeof(MQTT_ORGID) );
-    Serial.print("OpenEEW Device Activation directs MQTT data from this sensor to :");
-    Serial.println(MQTT_ORGID);
+    DynamicJsonDocument ReceiveDoc(200);
+    DeserializationError err = deserializeJson(ReceiveDoc, payload );
+    if (err) {
+      Serial.print(F("deserializeJson() failed with code : ")); 
+      Serial.println(err.c_str());
+      return false;
+    } else {
+      JsonObject ActivationData = ReceiveDoc.as<JsonObject>();
+      char firmware_latest[10];
+      String firmware_ota_url;
 
-    strncpy(firmware_latest, ActivationData["firmware_latest"], sizeof(firmware_latest) );
-    firmware_ota_url = ActivationData["firmware_ota_url"].as<String>();
-    FirmwareVersionCheck(firmware_latest);
+      strncpy(MQTT_ORGID, ActivationData["org"], sizeof(MQTT_ORGID) );
+      Serial.print("OpenEEW Device Activation directs MQTT data from this sensor to :");
+      Serial.println(MQTT_ORGID);
+
+      strncpy(firmware_latest, ActivationData["firmware_latest"], sizeof(firmware_latest) );
+      firmware_ota_url = ActivationData["firmware_ota_url"].as<String>();
+      FirmwareVersionCheck(firmware_latest, firmware_ota_url);
+    }
+    // Free resources
+    http.end();
+    return true ;
+  } else { 
+    // Free resources
+    http.end();
+    Serial.println("Device Activation failed. Waiting...");
+    return false;
   }
-
-  // Free resources
-  http.end();
 }
 
 
@@ -466,7 +475,10 @@ void setup() {
   SetTimeESP32();
 
   // Call the Activation endpoint to retrieve this OpenEEW Sensor details
-  OpenEEWDeviceActivation();
+  while( ! OpenEEWDeviceActivation() ) {
+    // Loop forever, waiting for activation success
+    delay(10000);
+  } 
 
   // Dynamically build the MQTT Device ID from the Mac Address of this ESP32
   // MQTT_ORGID was retreived by the OpenEEWDeviceActivation() function
@@ -657,7 +669,8 @@ void readNetworkStored(int netId)
   Serial.print("Found network ");
   Serial.print(_ssid);
   Serial.print(" , ");
-  Serial.println(_pswd);
+  DEBUG_L2(_pswd);  // off by default 
+  Serial.println("xxxxxx");
 }
 
 //Save a pair of SSID and PSWD to NVM
@@ -758,7 +771,8 @@ bool startSmartConfig()
     Serial.print("Smart Config done, connected to: ");
     Serial.print(_ssid);
     Serial.print(" with psswd: ");
-    Serial.println(_pswd);
+    Serial.println("xxxxxx");
+    DEBUG_L2(_pswd)  // off by default
     storeNetwork(_ssid, _pswd);
     return true;
   }
