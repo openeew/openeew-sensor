@@ -22,7 +22,7 @@ static char MQTT_HOST[48];            // ORGID.messaging.internetofthings.ibmclo
 static char MQTT_DEVICEID[30];        // Allocate a buffer large enough for "d:orgid:devicetype:deviceid"
 static char MQTT_ORGID[7];            // Watson IoT 6 character orgid
 #define MQTT_PORT        8883         // Secure MQTT 8883 / Insecure MQTT 1833
-#define MQTT_TOKEN       "W0rkSh0p"   // Watson IoT DeviceId authentication token  
+#define MQTT_TOKEN       "OpenEEW-sens0r"   // Watson IoT DeviceId authentication token  
 #define MQTT_DEVICETYPE  "OpenEEW"    // Watson IoT DeviceType
 #define MQTT_USER        "use-token-auth"
 #define MQTT_TOPIC       "iot-2/evt/status/fmt/json"
@@ -193,7 +193,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
 }
 
-bool FirmwareVersionCheck( char *firmware_latest );
+
+bool FirmwareVersionCheck( char *, String );
 bool FirmwareVersionCheck( char *firmware_latest, String firmware_ota_url ) {
   semver_t current_version = {};
   semver_t latest_version = {};
@@ -233,6 +234,34 @@ bool FirmwareVersionCheck( char *firmware_latest, String firmware_ota_url ) {
 }
 
 
+void GetGeoCoordinates( float *, float *);
+void GetGeoCoordinates( float *latitude, float *longitude) {
+  HTTPClient http;
+  #define GEOCOORD_APIKEY "9f0acd1eb4c51704c2f4429be20ba4c6"
+  http.begin( "http://api.ipstack.com/check?access_key=9f0acd1eb4c51704c2f4429be20ba4c6" );
+  int httpResponseCode = http.GET();
+  Serial.print("GetGeoCoordinates() ipstack HTTP Response code: ");
+  Serial.println(httpResponseCode);
+  String payload = http.getString();
+  http.end();  // free resources
+  Serial.print("ipstack HTTP get response payload: ");
+  Serial.println( payload );
+
+  if( httpResponseCode == 200 ) {  // Success
+    DynamicJsonDocument ReceiveDoc(900);
+    DeserializationError err = deserializeJson(ReceiveDoc, payload);
+    if (err) {
+      Serial.print(F("deserializeJson() failed with code : ")); 
+      Serial.println(err.c_str());
+    } else {
+      JsonObject GeoCoordData =  ReceiveDoc.as<JsonObject>(); 
+      *latitude  = GeoCoordData["latitude"];
+      *longitude = GeoCoordData["longitude"];
+    }
+  }
+}
+
+
 // Call the OpenEEW Device Activation endpoint to retrieve MQTT OrgID
 bool OpenEEWDeviceActivation();
 bool OpenEEWDeviceActivation() {
@@ -242,6 +271,13 @@ bool OpenEEWDeviceActivation() {
   Serial.println("Contacting the OpenEEW Device Activation Endpoint :");
   Serial.println(OPENEEW_ACTIVATION_ENDPOINT);
 
+  float lat, lng ;
+  GetGeoCoordinates( &lat, &lng );
+  Serial.print("GetGeoCoordinates() reported latitude,longitude : ");
+  Serial.print(lat,5);
+  Serial.print(",");
+  Serial.println(lng,5);
+
   HTTPClient http;
   // Domain name with URL path or IP address with path
   http.begin( OPENEEW_ACTIVATION_ENDPOINT );
@@ -250,15 +286,16 @@ bool OpenEEWDeviceActivation() {
   http.addHeader("Content-Type", "application/json");
   
   // Construct the serialized http request body
-  // '{"macaddress":"112233445566","lat":40,"lng":-74,"firmware_device":"1.0.0"}'
-  StaticJsonDocument<80> httpSendDoc;
+  // '{"macaddress":"112233445566","lat":40.00000,"lng":-74.00000,"firmware_device":"1.0.0"}'
+  DynamicJsonDocument httpSendDoc(120);
   String httpRequestData;
   httpSendDoc["macaddress"] = deviceID;
-  httpSendDoc["lat"] = 40.979671;
-  httpSendDoc["lng"] = -74.119179;
+  httpSendDoc["lat"] = lat;
+  httpSendDoc["lng"] = lng;
   httpSendDoc["firmware_device"] = OPENEEW_FIRMWARE_VERSION;
   // Serialize the entire string to be transmitted
   serializeJson(httpSendDoc, httpRequestData);
+  Serial.print("Sending Device Activation : ");
   Serial.println(httpRequestData);
 
   int httpResponseCode = http.POST(httpRequestData);
@@ -271,6 +308,7 @@ bool OpenEEWDeviceActivation() {
     String payload = http.getString();
     Serial.print("HTTP post response payload: ");
     Serial.println( payload );
+    http.end();  // free resources
 
     DynamicJsonDocument ReceiveDoc(200);
     DeserializationError err = deserializeJson(ReceiveDoc, payload );
@@ -291,12 +329,9 @@ bool OpenEEWDeviceActivation() {
       firmware_ota_url = ActivationData["firmware_ota_url"].as<String>();
       FirmwareVersionCheck(firmware_latest, firmware_ota_url);
     }
-    // Free resources
-    http.end();
     return true ;
-  } else { 
-    // Free resources
-    http.end();
+  } else {        // Failed to successfully contact endpoint
+    http.end();   // free resources
     Serial.println("Device Activation failed. Waiting...");
     return false;
   }
@@ -307,7 +342,7 @@ void Connect2MQTTbroker() {
   while (!mqtt.connected()) {
     Serial.print("Attempting MQTT connection...");
     // Attempt to connect / re-connect to IBM Watson IoT Platform
-    // These are globals set in setup()
+    // These params are globals assigned in setup()
     if( mqtt.connect(MQTT_DEVICEID, MQTT_USER, MQTT_TOKEN) ) {
   //if( mqtt.connect(MQTT_DEVICEID) ) { // No Token Authentication      
       Serial.println("MQTT Connected");
@@ -468,7 +503,8 @@ void setup() {
   Serial.println(ETH.macAddress());
 
   // Use the reverse octet Mac Address as the MQTT deviceID
-  sprintf(deviceID,"%02X%02X%02X%02X%02X%02X",mac[5],mac[4],mac[3],mac[2],mac[1],mac[0]);
+  //sprintf(deviceID,"%02X%02X%02X%02X%02X%02X",mac[5],mac[4],mac[3],mac[2],mac[1],mac[0]);
+  sprintf(deviceID,"%02X%02X%02X%02X%02X%02X",mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
   Serial.println(deviceID);
 
   // Set the time on the ESP32
@@ -482,7 +518,8 @@ void setup() {
 
   // Dynamically build the MQTT Device ID from the Mac Address of this ESP32
   // MQTT_ORGID was retreived by the OpenEEWDeviceActivation() function
-  sprintf(MQTT_DEVICEID,"d:%s:%s:%02X%02X%02X%02X%02X%02X",MQTT_ORGID,MQTT_DEVICETYPE,mac[5],mac[4],mac[3],mac[2],mac[1],mac[0]);
+  //sprintf(MQTT_DEVICEID,"d:%s:%s:%02X%02X%02X%02X%02X%02X",MQTT_ORGID,MQTT_DEVICETYPE,mac[5],mac[4],mac[3],mac[2],mac[1],mac[0]);
+  sprintf(MQTT_DEVICEID,"d:%s:%s:%02X%02X%02X%02X%02X%02X",MQTT_ORGID,MQTT_DEVICETYPE,mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
   Serial.println(MQTT_DEVICEID);
   
   sprintf(MQTT_HOST,"%s.messaging.internetofthings.ibmcloud.com",MQTT_ORGID);
