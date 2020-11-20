@@ -73,8 +73,6 @@ static char msg[2000];
 
 // ADXL Accelerometer
 void IRAM_ATTR isr_adxl();
-void generateMessage(String &out, long fifoData[32][3], int entryCount);
-void appendArray(String &out, long fifoData[32][3], int entryCount, int index);
 
 int32_t Adxl355SampleRate = 31;  // Reporting Sample Rate [31,125]
 
@@ -109,7 +107,29 @@ bool WiFiScanAndConnect();
 bool startSmartConfig();
 
 // --------------------------------------------------------------------------------------------
+// NeoPixel LEDs
+#include <Adafruit_NeoPixel.h>
+#define LED_PIN 16
+#define LED_COUNT 3
+//Adafruit_NeoPixel pixels = Adafruit_NeoPixel(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+//   NEO_KHZ800  800 KHz bitstream (most NeoPixel products w/WS2812 LEDs)
+//   NEO_GRB     Pixels are wired for GRB bitstream (most NeoPixel products)
+Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+void NeoPixelStatus( int );
 
+// Map the OpenEEW LED status colors to the Particle Photon status colors
+#define LED_OFF           0
+#define LED_CONNECTED     1 // Cyan breath
+#define LED_FIRMWARE_OTA  2 // Magenta
+#define LED_CONNECT_WIFI  3 // Green
+#define LED_CONNECT_CLOUD 4 // Cyan fast
+#define LED_LISTEN_WIFI   5 // Blue
+#define LED_WIFI_OFF      6 // White
+#define LED_SAFE_MODE     7 // Magenta breath
+#define LED_FIRMWARE_DFU  8 // Yellow
+#define LED_ERROR         9 // Red
+
+// --------------------------------------------------------------------------------------------
 void IRAM_ATTR isr_adxl() {
   fifoFull = true;
   //fifoCount++;
@@ -341,6 +361,7 @@ bool OpenEEWDeviceActivation() {
 void Connect2MQTTbroker() {
   while (!mqtt.connected()) {
     Serial.print("Attempting MQTT connection...");
+    NeoPixelStatus( LED_CONNECT_CLOUD ); // blink cyan
     // Attempt to connect / re-connect to IBM Watson IoT Platform
     // These params are globals assigned in setup()
     if( mqtt.connect(MQTT_DEVICEID, MQTT_USER, MQTT_TOKEN) ) {
@@ -432,6 +453,7 @@ void NetworkEvent(WiFiEvent_t event) {
       break;
     case SYSTEM_EVENT_STA_STOP:
       Serial.println("WiFi Stopped");
+      NeoPixelStatus( LED_WIFI_OFF ); // White
       break;
     case SYSTEM_EVENT_AP_STOP:
       Serial.println("ESP32 soft-AP stop");
@@ -453,6 +475,7 @@ void SetTimeESP32() {
   configTime(TZ_OFFSET * 3600, TZ_DST * 60, "pool.ntp.org", "0.pool.ntp.org");
   Serial.println("\nWaiting for time");
   while(time(nullptr) <= 100000) {
+    NeoPixelStatus( LED_LISTEN_WIFI ); // blink blue
     Serial.print(".");
     delay(100);
   }
@@ -460,7 +483,7 @@ void SetTimeESP32() {
   unsigned start = millis();
   while (millis() - start < timeout) {
       time_t now = time(nullptr);
-      if (now > (2018 - 1970) * 365 * 24 * 3600) {
+      if (now > (2019 - 1970) * 365 * 24 * 3600) {
           break;
       }
       delay(100);
@@ -479,6 +502,8 @@ void setup() {
   while (!Serial) { }
   Serial.println();
   Serial.println("OpenEEW Sensor Application");
+
+  strip.setBrightness(130);  // Dim the LED to 50% - 0 off, 255 full bright 
 
   // Start WiFi connection
   WiFi.onEvent(NetworkEvent);
@@ -513,6 +538,7 @@ void setup() {
   // Call the Activation endpoint to retrieve this OpenEEW Sensor details
   while( ! OpenEEWDeviceActivation() ) {
     // Loop forever, waiting for activation success
+    NeoPixelStatus( LED_CONNECT_CLOUD ); // blink Cyan
     delay(10000);
   } 
 
@@ -530,22 +556,6 @@ void setup() {
 
   // Connect to MQTT - IBM Watson IoT Platform
   Connect2MQTTbroker();
-
-/*
-  // Announce this device is connected
-  // Not a requirement for Watson IoT, tell OpenEEW the location of this device
-  JsonObject payload = jsonDoc.to<JsonObject>();
-  payload["device_id"] = deviceID;
-  payload["time"] = ctime(&now);
-  // payload["location"] = // {gps_lat,gps_lon}
-  serializeJson(jsonDoc, msg, 2000);
-  Serial.println(msg);
-
-  if (!mqtt.publish(MQTT_TOPIC_DEVICES, msg)) {
-    Serial.println("MQTT Publish failed");
-  }
-  jsonDoc.clear();
-*/
 
 #if OPENEEW_SAMPLE_RATE_125
   odr_lpf = Adxl355::ODR_LPF::ODR_125_AND_31_25;
@@ -572,6 +582,7 @@ void loop() {
   // Confirm Connection to MQTT - IBM Watson IoT Platform
   Connect2MQTTbroker();
   
+  NeoPixelStatus( LED_CONNECTED ); // Success - blink cyan
   //====================== ADXL Accelerometer =====================
   if (fifoFull)  {
     fifoFull = false;
@@ -786,6 +797,12 @@ bool startSmartConfig()
   while( !WiFi.smartConfigDone() || eth_connected ) {
     delay(500);
     Serial.print(".");
+    NeoPixelStatus( LED_LISTEN_WIFI );  // blink blue
+  }
+
+  for( int i=0;i<4;i++){
+    delay(500);
+    NeoPixelStatus( LED_CONNECT_WIFI ); // Success - blink green
   }
 
   if( eth_connected ) {
@@ -801,6 +818,7 @@ bool startSmartConfig()
   while( WiFi.status() != WL_CONNECTED && (millis() - t0) < CONNECTION_TO)  {
     delay(500);
     Serial.print(".");
+    NeoPixelStatus( LED_LISTEN_WIFI );  // blink blue
   }
   if (WiFi.status() == WL_CONNECTED) {
     _ssid = WiFi.SSID();
@@ -811,10 +829,56 @@ bool startSmartConfig()
     Serial.println("xxxxxx");
     DEBUG_L2(_pswd)  // off by default
     storeNetwork(_ssid, _pswd);
+    NeoPixelStatus( LED_CONNECT_WIFI ); // Success - blink green
     return true;
   }
   else {
     Serial.println("Something went wrong with SmartConfig");
     return false;
   }
+}
+
+
+void NeoPixelStatus( int status ) {
+  // Turn leds off to cause a blink effect
+  strip.fill( strip.Color(0,0,0), 0, 3);
+  strip.show(); // This sends the updated pixel color to the hardware.
+  delay(400);   // Delay for a period of time (in milliseconds).
+
+  switch( status ) {
+    case LED_OFF :
+      strip.fill( strip.Color(0,0,0), 0, 3);  // Off
+      break;
+    case LED_CONNECTED :
+      strip.fill( strip.Color(0,255,255), 0, 3);  // Cyan breath
+      break;
+    case LED_FIRMWARE_OTA :
+      strip.fill( strip.Color(255,0,255), 0, 3);  // Magenta
+      break;
+    case LED_CONNECT_WIFI :
+      strip.fill( strip.Color(0,255,0), 0, 3);  // Green
+      break;
+    case LED_CONNECT_CLOUD :
+      strip.fill( strip.Color(0,255,255), 0, 3);  // Cyan fast
+      break;
+    case LED_LISTEN_WIFI :
+      strip.fill( strip.Color(0,0,255), 0, 3);  // Blue
+      break;
+    case LED_WIFI_OFF :
+      strip.fill( strip.Color(255,255,255), 0, 3);  // White
+      break;
+    case LED_SAFE_MODE :
+      strip.fill( strip.Color(255,0,255), 0, 3);  // Magenta breath
+      break;
+    case LED_FIRMWARE_DFU :
+      strip.fill( strip.Color(255,255,0), 0, 3);  // Yellow
+      break;
+    case LED_ERROR :
+      strip.fill( strip.Color(0,255,0), 0, 3);  // Red
+      break;
+    default :
+      strip.fill( strip.Color(0,0,0), 0, 3);    // Off
+      break;
+  }
+  strip.show(); // Send the updated pixel color to the hardware
 }
