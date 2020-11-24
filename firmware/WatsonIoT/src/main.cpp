@@ -92,7 +92,7 @@ long fifoDelta[32][3];
 bool fifoFull = false;
 int  fifoCount = 0;
 int  numValsForAvg = 0;
-static int id = 0;
+// static int id = 0;
 
 Adxl355 adxl355(CHIP_SELECT_PIN_ADXL);
 SPIClass *spi1 = NULL;
@@ -639,7 +639,7 @@ void loop() {
 
           // Load the key/value pairs into the serialized ArduinoJSON format
           status["device_id"] = deviceID;
-          status["msgId"] = id;
+          // status["msgId"] = id;
           status["traces"] = traces;
 
           // Serialize the entire string to be transmitted
@@ -653,7 +653,7 @@ void loop() {
 
           // Reset fifoCount and fifoMessage
           fifoCount = 0;
-          id++;
+          // id++;
           jsonDoc.clear();
           jsonTraces.clear();
           traces = jsonTraces.to<JsonArray>();
