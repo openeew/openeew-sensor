@@ -77,7 +77,8 @@ void IRAM_ATTR isr_adxl();
 int32_t Adxl355SampleRate = 31;  // Reporting Sample Rate [31,125]
 
 int8_t CHIP_SELECT_PIN_ADXL = 15;
-int8_t INT_PIN = 2;
+int8_t ADXL_INT_PIN = 2;     // ADXL is on interupt 2 on prototype board
+//int8_t ADXL_INT_PIN = 35;  // ADXL is on interupt 35 on production board
 Adxl355::RANGE_VALUES range = Adxl355::RANGE_VALUES::RANGE_2G;
 Adxl355::ODR_LPF odr_lpf;
 Adxl355::STATUS_VALUES adxstatus;
@@ -568,9 +569,9 @@ void setup() {
   sr = 31.25;
 #endif
 
-  pinMode(INT_PIN, INPUT);
+  pinMode(ADXL_INT_PIN, INPUT);
   pinMode(CHIP_SELECT_PIN_ADXL, OUTPUT);
-  attachInterrupt(digitalPinToInterrupt(INT_PIN), isr_adxl, FALLING);
+  attachInterrupt(digitalPinToInterrupt(ADXL_INT_PIN), isr_adxl, FALLING);
 
   spi1 = new SPIClass(HSPI);
   adxl355.initSPI(*spi1);
