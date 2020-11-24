@@ -77,8 +77,11 @@ void IRAM_ATTR isr_adxl();
 int32_t Adxl355SampleRate = 31;  // Reporting Sample Rate [31,125]
 
 int8_t CHIP_SELECT_PIN_ADXL = 15;
-int8_t ADXL_INT_PIN = 2;     // ADXL is on interupt 2 on prototype board
-//int8_t ADXL_INT_PIN = 35;  // ADXL is on interupt 35 on production board
+#ifdef  PRODUCTION_BOARD
+int8_t ADXL_INT_PIN = 35; // ADXL is on interrupt 35 on production board
+#else
+int8_t ADXL_INT_PIN = 2;  // ADXL is on interrupt 2 on prototype board
+#endif
 Adxl355::RANGE_VALUES range = Adxl355::RANGE_VALUES::RANGE_2G;
 Adxl355::ODR_LPF odr_lpf;
 Adxl355::STATUS_VALUES adxstatus;
