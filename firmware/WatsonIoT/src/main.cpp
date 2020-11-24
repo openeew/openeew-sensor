@@ -584,7 +584,6 @@ void loop() {
   // Confirm Connection to MQTT - IBM Watson IoT Platform
   Connect2MQTTbroker();
 
-  NeoPixelStatus( LED_CONNECTED ); // Success - blink cyan
   //====================== ADXL Accelerometer =====================
   if (fifoFull)  {
     fifoFull = false;
@@ -649,6 +648,8 @@ void loop() {
           // Publish the message to MQTT Broker
           if (!mqtt.publish(MQTT_TOPIC, msg)) {
             Serial.println("MQTT Publish failed");
+          } else {
+            NeoPixelStatus( LED_CONNECTED ); // Success - blink cyan
           }
 
           // Reset fifoCount and fifoMessage
