@@ -22,7 +22,7 @@ static char MQTT_HOST[48];            // ORGID.messaging.internetofthings.ibmclo
 static char MQTT_DEVICEID[30];        // Allocate a buffer large enough for "d:orgid:devicetype:deviceid"
 static char MQTT_ORGID[7];            // Watson IoT 6 character orgid
 #define MQTT_PORT        8883         // Secure MQTT 8883 / Insecure MQTT 1833
-#define MQTT_TOKEN       "OpenEEW-sens0r"   // Watson IoT DeviceId authentication token  
+#define MQTT_TOKEN       "OpenEEW-sens0r"   // Watson IoT DeviceId authentication token
 #define MQTT_DEVICETYPE  "OpenEEW"    // Watson IoT DeviceType
 #define MQTT_USER        "use-token-auth"
 #define MQTT_TOPIC       "iot-2/evt/status/fmt/json"
@@ -77,7 +77,11 @@ void IRAM_ATTR isr_adxl();
 int32_t Adxl355SampleRate = 31;  // Reporting Sample Rate [31,125]
 
 int8_t CHIP_SELECT_PIN_ADXL = 15;
-int8_t INT_PIN = 2;
+#ifdef  PRODUCTION_BOARD
+int8_t ADXL_INT_PIN = 35; // ADXL is on interrupt 35 on production board
+#else
+int8_t ADXL_INT_PIN = 2;  // ADXL is on interrupt 2 on prototype board
+#endif
 Adxl355::RANGE_VALUES range = Adxl355::RANGE_VALUES::RANGE_2G;
 Adxl355::ODR_LPF odr_lpf;
 Adxl355::STATUS_VALUES adxstatus;
@@ -91,7 +95,7 @@ long fifoDelta[32][3];
 bool fifoFull = false;
 int  fifoCount = 0;
 int  numValsForAvg = 0;
-static int id = 0;
+// static int id = 0;
 
 Adxl355 adxl355(CHIP_SELECT_PIN_ADXL);
 SPIClass *spi1 = NULL;
@@ -160,12 +164,12 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] : ");
-  
+
   payload[length] = 0; // ensure valid content is zero terminated so can treat as c-string
   Serial.println((char *)payload);
   DeserializationError err = deserializeJson(jsonReceiveDoc, (char *)payload);
   if (err) {
-    Serial.print(F("deserializeJson() failed with code : ")); 
+    Serial.print(F("deserializeJson() failed with code : "));
     Serial.println(err.c_str());
   } else {
     JsonObject cmdData = jsonReceiveDoc.as<JsonObject>();
@@ -177,7 +181,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
       // Set the ADXL355 Sample Rate
       int32_t NewSampleRate = 0;
       bool    SampleRateChanged = false ;
-      
+
       NewSampleRate = cmdData["SampleRate"].as<int32_t>(); // this form allows you specify the type of the data you want from the JSON object
       if( NewSampleRate == 31 ) {
         // Requested sample rate of 31 is valid
@@ -246,6 +250,7 @@ bool FirmwareVersionCheck( char *firmware_latest, String firmware_ota_url ) {
     Serial.println("An OTA upgrade is required. Download the new OpenEEW firmware :");
     Serial.println(firmware_ota_url);
     // Launch an OTA upgrade here...
+    NeoPixelStatus( LED_FIRMWARE_OTA ); // blink magenta
   }
   // Free allocated memory when we're done
   semver_free(&current_version);
@@ -271,10 +276,10 @@ void GetGeoCoordinates( float *latitude, float *longitude) {
     DynamicJsonDocument ReceiveDoc(900);
     DeserializationError err = deserializeJson(ReceiveDoc, payload);
     if (err) {
-      Serial.print(F("deserializeJson() failed with code : ")); 
+      Serial.print(F("deserializeJson() failed with code : "));
       Serial.println(err.c_str());
     } else {
-      JsonObject GeoCoordData =  ReceiveDoc.as<JsonObject>(); 
+      JsonObject GeoCoordData =  ReceiveDoc.as<JsonObject>();
       *latitude  = GeoCoordData["latitude"];
       *longitude = GeoCoordData["longitude"];
     }
@@ -286,7 +291,7 @@ void GetGeoCoordinates( float *latitude, float *longitude) {
 bool OpenEEWDeviceActivation();
 bool OpenEEWDeviceActivation() {
   // OPENEEW_ACTIVATION_ENDPOINT "https://openeew-earthquakes.mybluemix.net/activation?ver=1"
-  // $ curl -i  -X POST -d '{"macaddress":"112233445566","lat":40,"lng":-74,"firmware_device":"1.0.0"}' 
+  // $ curl -i  -X POST -d '{"macaddress":"112233445566","lat":40,"lng":-74,"firmware_device":"1.0.0"}'
   //    -H "Content-type: application/JSON" https://openeew-earthquakes.mybluemix.net/activation?ver=1
   Serial.println("Contacting the OpenEEW Device Activation Endpoint :");
   Serial.println(OPENEEW_ACTIVATION_ENDPOINT);
@@ -304,7 +309,7 @@ bool OpenEEWDeviceActivation() {
 
    // HTTP request with a content type: application/json
   http.addHeader("Content-Type", "application/json");
-  
+
   // Construct the serialized http request body
   // '{"macaddress":"112233445566","lat":40.00000,"lng":-74.00000,"firmware_device":"1.0.0"}'
   DynamicJsonDocument httpSendDoc(120);
@@ -333,7 +338,7 @@ bool OpenEEWDeviceActivation() {
     DynamicJsonDocument ReceiveDoc(200);
     DeserializationError err = deserializeJson(ReceiveDoc, payload );
     if (err) {
-      Serial.print(F("deserializeJson() failed with code : ")); 
+      Serial.print(F("deserializeJson() failed with code : "));
       Serial.println(err.c_str());
       return false;
     } else {
@@ -365,7 +370,7 @@ void Connect2MQTTbroker() {
     // Attempt to connect / re-connect to IBM Watson IoT Platform
     // These params are globals assigned in setup()
     if( mqtt.connect(MQTT_DEVICEID, MQTT_USER, MQTT_TOKEN) ) {
-  //if( mqtt.connect(MQTT_DEVICEID) ) { // No Token Authentication      
+  //if( mqtt.connect(MQTT_DEVICEID) ) { // No Token Authentication
       Serial.println("MQTT Connected");
       mqtt.subscribe(MQTT_TOPIC_ALARM);
       mqtt.subscribe(MQTT_TOPIC_SAMPLERATE);
@@ -389,7 +394,7 @@ void NetworkEvent(WiFiEvent_t event) {
       break;
     case SYSTEM_EVENT_SCAN_DONE:
       Serial.println("Completed scan for access points");
-      break;      
+      break;
     case SYSTEM_EVENT_STA_CONNECTED: // 4
       Serial.println("ESP32 WiFi connected to AP");
       WiFi.setHostname("openeew-sensor-wifi");
@@ -397,7 +402,7 @@ void NetworkEvent(WiFiEvent_t event) {
     case SYSTEM_EVENT_STA_DISCONNECTED:
       Serial.println("Disconnected from WiFi access point");
       wificonnected = false;
-      break;      
+      break;
     case SYSTEM_EVENT_STA_GOT_IP:    // 7
       Serial.println("ESP32 station got IP from connected AP");
       Serial.print("Obtained IP address: ");
@@ -437,7 +442,7 @@ void NetworkEvent(WiFiEvent_t event) {
         // Handled at a lower level?
         // mqtt.setClient(ETH); // Fails. wifiClient might still be valid
         Connect2MQTTbroker();
-      }  
+      }
       break;
     case SYSTEM_EVENT_ETH_DISCONNECTED:
       Serial.println("ETH Disconnected");
@@ -469,7 +474,7 @@ void NetworkEvent(WiFiEvent_t event) {
 }
 
 
-// MQTT SSL requires a relatively accurate time between broker and client 
+// MQTT SSL requires a relatively accurate time between broker and client
 void SetTimeESP32() {
   // Set time from NTP servers
   configTime(TZ_OFFSET * 3600, TZ_DST * 60, "pool.ntp.org", "0.pool.ntp.org");
@@ -503,7 +508,7 @@ void setup() {
   Serial.println();
   Serial.println("OpenEEW Sensor Application");
 
-  strip.setBrightness(130);  // Dim the LED to 50% - 0 off, 255 full bright 
+  strip.setBrightness(130);  // Dim the LED to 50% - 0 off, 255 full bright
 
   // Start WiFi connection
   WiFi.onEvent(NetworkEvent);
@@ -521,7 +526,7 @@ void setup() {
   // Output this ESP32 Unique WiFi MAC Address
   Serial.print("WiFi MAC: ");
   Serial.println(WiFi.macAddress());
-  
+
   // Start the ETH interface
   ETH.begin(ETH_ADDR, ETH_POWER_PIN, ETH_MDC_PIN, ETH_MDIO_PIN, ETH_TYPE, ETH_CLK_MODE);
   Serial.print("ETH  MAC: ");
@@ -540,14 +545,14 @@ void setup() {
     // Loop forever, waiting for activation success
     NeoPixelStatus( LED_CONNECT_CLOUD ); // blink Cyan
     delay(10000);
-  } 
+  }
 
   // Dynamically build the MQTT Device ID from the Mac Address of this ESP32
   // MQTT_ORGID was retreived by the OpenEEWDeviceActivation() function
   //sprintf(MQTT_DEVICEID,"d:%s:%s:%02X%02X%02X%02X%02X%02X",MQTT_ORGID,MQTT_DEVICETYPE,mac[5],mac[4],mac[3],mac[2],mac[1],mac[0]);
   sprintf(MQTT_DEVICEID,"d:%s:%s:%02X%02X%02X%02X%02X%02X",MQTT_ORGID,MQTT_DEVICETYPE,mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
   Serial.println(MQTT_DEVICEID);
-  
+
   sprintf(MQTT_HOST,"%s.messaging.internetofthings.ibmcloud.com",MQTT_ORGID);
 
   char mqttparams[100]; // Allocate a buffer large enough for this string ~95 chars
@@ -567,9 +572,9 @@ void setup() {
   sr = 31.25;
 #endif
 
-  pinMode(INT_PIN, INPUT);
+  pinMode(ADXL_INT_PIN, INPUT);
   pinMode(CHIP_SELECT_PIN_ADXL, OUTPUT);
-  attachInterrupt(digitalPinToInterrupt(INT_PIN), isr_adxl, FALLING);
+  attachInterrupt(digitalPinToInterrupt(ADXL_INT_PIN), isr_adxl, FALLING);
 
   spi1 = new SPIClass(HSPI);
   adxl355.initSPI(*spi1);
@@ -581,13 +586,12 @@ void loop() {
   mqtt.loop();
   // Confirm Connection to MQTT - IBM Watson IoT Platform
   Connect2MQTTbroker();
-  
-  NeoPixelStatus( LED_CONNECTED ); // Success - blink cyan
+
   //====================== ADXL Accelerometer =====================
   if (fifoFull)  {
     fifoFull = false;
     adxstatus = adxl355.getStatus();
-    
+
     if (adxstatus & Adxl355::STATUS_VALUES::FIFO_FULL) {
       if (-1 != (numEntriesFifo = adxl355.readFifoEntries((long *)fifoOut))) {
         sumFifo[0] = 0;
@@ -610,13 +614,13 @@ void loop() {
         // Generate an array of json objects that contain x,y,z arrays of 32 floats.
         // [{"x":[],"y":[],"z":[]},{"x":[],"y":[],"z":[]}]
         JsonObject acceleration = traces.createNestedObject();
-        
+
         // [{"x":[9.479,0],"y":[0.128,-1.113],"z":[-0.185,123.321]},{"x":[9.479,0],"y":[0.128,-1.113],"z":[-0.185,123.321]}]
         double gal;
         for (int i = 0; i < numEntriesFifo; i++) {
           gal = adxl355.valueToGals(fifoDelta[i][0]);
           acceleration["x"].add(round(gal*1000)/1000);
-          
+
           gal = adxl355.valueToGals(fifoDelta[i][1]);
           acceleration["y"].add(round(gal*1000)/1000);
 
@@ -637,7 +641,7 @@ void loop() {
 
           // Load the key/value pairs into the serialized ArduinoJSON format
           status["device_id"] = deviceID;
-          status["msgId"] = id;
+          // status["msgId"] = id;
           status["traces"] = traces;
 
           // Serialize the entire string to be transmitted
@@ -647,11 +651,13 @@ void loop() {
           // Publish the message to MQTT Broker
           if (!mqtt.publish(MQTT_TOPIC, msg)) {
             Serial.println("MQTT Publish failed");
+          } else {
+            NeoPixelStatus( LED_CONNECTED ); // Success - blink cyan
           }
-          
+
           // Reset fifoCount and fifoMessage
           fifoCount = 0;
-          id++;
+          // id++;
           jsonDoc.clear();
           jsonTraces.clear();
           traces = jsonTraces.to<JsonArray>();
@@ -717,7 +723,7 @@ void readNetworkStored(int netId)
   Serial.print("Found network ");
   Serial.print(_ssid);
   Serial.print(" , ");
-  DEBUG_L2(_pswd);  // off by default 
+  DEBUG_L2(_pswd);  // off by default
   Serial.println("xxxxxx");
 }
 
@@ -766,6 +772,7 @@ bool WiFiScanAndConnect()
         unsigned long t0 = millis();
 
         while (WiFi.status() != WL_CONNECTED && (millis() - t0) < CONNECTION_TO) {
+          NeoPixelStatus( LED_LISTEN_WIFI ); // blink blue
           delay(1000);
         }
         if (WiFi.status() == WL_CONNECTED) {
@@ -841,43 +848,52 @@ bool startSmartConfig()
 
 void NeoPixelStatus( int status ) {
   // Turn leds off to cause a blink effect
-  strip.fill( strip.Color(0,0,0), 0, 3);
+  strip.clear();  // Off
   strip.show(); // This sends the updated pixel color to the hardware.
   delay(400);   // Delay for a period of time (in milliseconds).
 
   switch( status ) {
     case LED_OFF :
-      strip.fill( strip.Color(0,0,0), 0, 3);  // Off
+      strip.clear();  // Off
       break;
     case LED_CONNECTED :
       strip.fill( strip.Color(0,255,255), 0, 3);  // Cyan breath
+      Serial.println("LED_CONNECTED - Cyan");
       break;
     case LED_FIRMWARE_OTA :
       strip.fill( strip.Color(255,0,255), 0, 3);  // Magenta
+      Serial.println("LED_FIRMWARE_OTA - Magenta");
       break;
     case LED_CONNECT_WIFI :
       strip.fill( strip.Color(0,255,0), 0, 3);  // Green
+      Serial.println("LED_CONNECT_WIFI - Green");
       break;
     case LED_CONNECT_CLOUD :
       strip.fill( strip.Color(0,255,255), 0, 3);  // Cyan fast
+      Serial.println("LED_CONNECT_CLOUD - Cyan");
       break;
     case LED_LISTEN_WIFI :
       strip.fill( strip.Color(0,0,255), 0, 3);  // Blue
+      Serial.println("LED_LISTEN_WIFI - Blue");
       break;
     case LED_WIFI_OFF :
       strip.fill( strip.Color(255,255,255), 0, 3);  // White
+      Serial.println("LED_WIFI_OFF - White");
       break;
     case LED_SAFE_MODE :
       strip.fill( strip.Color(255,0,255), 0, 3);  // Magenta breath
+      Serial.println("LED_SAFE_MODE - Magenta");
       break;
     case LED_FIRMWARE_DFU :
       strip.fill( strip.Color(255,255,0), 0, 3);  // Yellow
+      Serial.println("LED_FIRMWARE_DFU - Yellow");
       break;
     case LED_ERROR :
       strip.fill( strip.Color(0,255,0), 0, 3);  // Red
+      Serial.println("LED_ERROR - Red");
       break;
     default :
-      strip.fill( strip.Color(0,0,0), 0, 3);    // Off
+      strip.clear();  // Off
       break;
   }
   strip.show(); // Send the updated pixel color to the hardware

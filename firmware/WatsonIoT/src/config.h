@@ -1,6 +1,7 @@
 #define OPENEEW_SAMPLE_RATE_125 false
 #define OPENEEW_SAMPLE_RATE_31_25 true
 
+#define PRODUCTION_BOARD
 #define debug true
 
 #define LOG_L2 false //Needs to be true to have logging about deep wifi info
