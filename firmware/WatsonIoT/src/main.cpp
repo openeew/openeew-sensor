@@ -8,6 +8,8 @@
 #include <HTTPClient.h>
 #include <Adxl355.h>
 #include <math.h>
+#include <esp_https_ota.h>
+#include <SPIFFS.h>
 #include "config.h"
 #include "semver.h"  // from https://github.com/h2non/semver.c
 
@@ -28,8 +30,11 @@ static char MQTT_ORGID[7];            // Watson IoT 6 character orgid
 #define MQTT_TOPIC       "iot-2/evt/status/fmt/json"
 #define MQTT_TOPIC_ALARM "iot-2/cmd/earthquake/fmt/json"
 #define MQTT_TOPIC_SAMPLERATE "iot-2/cmd/samplerate/fmt/json"
-#define MQTT_TOPIC_DEVICES "iot-2/evt/status/fmt/json"
 char deviceID[13];
+
+// Store the .mybluemix.net Server PEM and Digicert CA and Root CA in SPIFFS
+// If an OTA firmware upgrade is required, the binary is downloaded from a secure server
+#define MYBLUEMIX_PEM_FILE "/mybluemix-net-chain.pem"
 
 // Timezone info
 #define TZ_OFFSET -5  // (EST) Hours timezone offset to GMT (without daylight saving time)
@@ -46,7 +51,11 @@ PubSubClient mqtt(MQTT_HOST, MQTT_PORT, callback, wifiClient);
 #endif
 #define ETH_CLK_MODE ETH_CLOCK_GPIO17_OUT
 // Pin# of the enable signal for the external crystal oscillator (-1 to disable for internal APLL source)
-#define ETH_POWER_PIN   2
+#ifdef  PRODUCTION_BOARD
+#define ETH_POWER_PIN    2  // Ethernet on production board
+#else
+#define ETH_POWER_PIN   -1  // Ethernet on prototype board
+#endif
 // Type of the Ethernet PHY (LAN8720 or TLK110)
 #define ETH_TYPE        ETH_PHY_LAN8720
 // I²C-address of Ethernet PHY (0 or 1 for LAN8720, 31 for TLK110)
@@ -249,8 +258,43 @@ bool FirmwareVersionCheck( char *firmware_latest, String firmware_ota_url ) {
     // OTA upgrade is required
     Serial.println("An OTA upgrade is required. Download the new OpenEEW firmware :");
     Serial.println(firmware_ota_url);
-    // Launch an OTA upgrade here...
+    // Launch an OTA upgrade
     NeoPixelStatus( LED_FIRMWARE_OTA ); // blink magenta
+
+    if( SPIFFS.begin(true) ) {
+      Serial.printf("Opening Server PEM Chain : %s\r\n", MYBLUEMIX_PEM_FILE);
+      File pemfile = SPIFFS.open( MYBLUEMIX_PEM_FILE );
+      if( pemfile ) {
+        char *MyBlueMixNetPemChain = nullptr;
+        size_t pemSize = pemfile.size();
+        MyBlueMixNetPemChain = (char *)malloc(pemSize);
+
+        if( pemSize != pemfile.readBytes(MyBlueMixNetPemChain, pemSize) ) {
+          Serial.printf("Reading %s pem server certificate chain failed.\r\n",MYBLUEMIX_PEM_FILE);
+        } else {
+          Serial.printf("Read %s pem server certificate chain from SPIFFS\r\n",MYBLUEMIX_PEM_FILE);
+          //Serial.println( MyBlueMixNetPemChain );
+
+          Serial.println("Starting OpenEEW OTA firmware upgrade...");
+          esp_http_client_config_t config = {0};
+          config.url = firmware_ota_url.c_str() ;
+          config.cert_pem = MyBlueMixNetPemChain ;
+          esp_err_t ret = esp_https_ota(&config);
+          if (ret == ESP_OK) {
+              Serial.println("OTA upgrade downloaded. Restarting...");
+              esp_restart();
+          } else {
+              Serial.println("The OpenEEW OTA firmware upgrade failed : ESP_FAIL");
+          }
+        }
+        free( MyBlueMixNetPemChain );
+      } else {
+          Serial.println("Failed to open server pem chain.");
+      }
+      pemfile.close();
+    } else {
+      Serial.println("An error has occurred while mounting SPIFFS");
+    }
   }
   // Free allocated memory when we're done
   semver_free(&current_version);
