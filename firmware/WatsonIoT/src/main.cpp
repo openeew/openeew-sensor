@@ -8,6 +8,7 @@
 #include <HTTPClient.h>
 #include <Adxl355.h>
 #include <math.h>
+#include <esp_https_ota.h>
 #include "config.h"
 #include "semver.h"  // from https://github.com/h2non/semver.c
 
@@ -28,8 +29,58 @@ static char MQTT_ORGID[7];            // Watson IoT 6 character orgid
 #define MQTT_TOPIC       "iot-2/evt/status/fmt/json"
 #define MQTT_TOPIC_ALARM "iot-2/cmd/earthquake/fmt/json"
 #define MQTT_TOPIC_SAMPLERATE "iot-2/cmd/samplerate/fmt/json"
-#define MQTT_TOPIC_DEVICES "iot-2/evt/status/fmt/json"
 char deviceID[13];
+
+#define MYBLUEMIX_PEM                                      \
+"-----BEGIN CERTIFICATE----- \r\n"  \
+"MIIHOTCCBiGgAwIBAgIQAf75+k140Eka/Iwmx5OFeTANBgkqhkiG9w0BAQsFADBN\r\n"  \
+"MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMScwJQYDVQQDEx5E\r\n"  \
+"aWdpQ2VydCBTSEEyIFNlY3VyZSBTZXJ2ZXIgQ0EwHhcNMjAwNDExMDAwMDAwWhcN\r\n"  \
+"MjIwNzE0MTIwMDAwWjCBgTELMAkGA1UEBhMCVVMxETAPBgNVBAgTCE5ldyBZb3Jr\r\n"  \
+"MQ8wDQYDVQQHEwZBcm1vbmsxNDAyBgNVBAoTK0ludGVybmF0aW9uYWwgQnVzaW5l\r\n"  \
+"c3MgTWFjaGluZXMgQ29ycG9yYXRpb24xGDAWBgNVBAMMDyoubXlibHVlbWl4Lm5l\r\n"  \
+"dDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAMmMQwfczgNeG1NeF++p\r\n"  \
+"9LhODnAawubHb9Zh3H7fBklbImq5s0K1WMQy2ZemETP83aii3dEDAUtfHQ8uP2If\r\n"  \
+"zh2SFg7AEvkXQjg9XERONbC9muLCJ3XIF6vIWLpgI+Ojq+cIRAOgaLR5xyc8V1DR\r\n"  \
+"gFFJ9n/zMTqUkKna7R0IeQqJOth1f5nJom2+m0FVXeKd2nwAVC9c9DlQ4BZMveyM\r\n"  \
+"Je/dnCqrJNx4xHgU9k7z/fZ0KOj1aJOnzYWpTDtncyAdr3Q/PiWItTsiy9IgLYt7\r\n"  \
+"/wCWWUMSVnuPMyAHR42iAHjMOQLQxQnNcnp+GOUcH4KiR8YHo5FSJtv+LxCxMEme\r\n"  \
+"uokCAwEAAaOCA94wggPaMB8GA1UdIwQYMBaAFA+AYRyCMWHVLyjnjUY4tCzhxtni\r\n"  \
+"MB0GA1UdDgQWBBTvEX9mc1YBJTOgsByB7AiD2HYyTjApBgNVHREEIjAggg8qLm15\r\n"  \
+"Ymx1ZW1peC5uZXSCDW15Ymx1ZW1peC5uZXQwDgYDVR0PAQH/BAQDAgWgMB0GA1Ud\r\n"  \
+"JQQWMBQGCCsGAQUFBwMBBggrBgEFBQcDAjBrBgNVHR8EZDBiMC+gLaArhilodHRw\r\n"  \
+"Oi8vY3JsMy5kaWdpY2VydC5jb20vc3NjYS1zaGEyLWc2LmNybDAvoC2gK4YpaHR0\r\n"  \
+"cDovL2NybDQuZGlnaWNlcnQuY29tL3NzY2Etc2hhMi1nNi5jcmwwTAYDVR0gBEUw\r\n"  \
+"QzA3BglghkgBhv1sAQEwKjAoBggrBgEFBQcCARYcaHR0cHM6Ly93d3cuZGlnaWNl\r\n"  \
+"cnQuY29tL0NQUzAIBgZngQwBAgIwfAYIKwYBBQUHAQEEcDBuMCQGCCsGAQUFBzAB\r\n"  \
+"hhhodHRwOi8vb2NzcC5kaWdpY2VydC5jb20wRgYIKwYBBQUHMAKGOmh0dHA6Ly9j\r\n"  \
+"YWNlcnRzLmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydFNIQTJTZWN1cmVTZXJ2ZXJDQS5j\r\n"  \
+"cnQwDAYDVR0TAQH/BAIwADCCAfUGCisGAQQB1nkCBAIEggHlBIIB4QHfAHYApLkJ\r\n"  \
+"kLQYWBSHuxOizGdwCjw1mAT5G9+443fNDsgN3BAAAAFxZpGDjwAABAMARzBFAiEA\r\n"  \
+"1thufVlU62LWP3zPJjLOa+Er6SKGUlztCGEkNFmDR0gCIAPZWiu4e7kmfoFHexrU\r\n"  \
+"Yy1p2MG5ew/Y82kQXpuhcM1qAHYAIkVFB1lVJFaWP6Ev8fdthuAjJmOtwEt/XcaD\r\n"  \
+"XG7iDwIAAAFxZpGDywAABAMARzBFAiBqVTHJp4rl6vLheLDdn93Hs1RESGFXrP6I\r\n"  \
+"x0tcb9aaqAIhAL6KsaeStsUkgdfWk7yLZ1wDS2aIspDUYdeyZg6WNMWgAHUAu9nf\r\n"  \
+"vB+KcbWTlCOXqpJ7RzhXlQqrUugakJZkNo4e0YUAAAFxZpGDnQAABAMARjBEAiBR\r\n"  \
+"hnp6teLVf4t7dG9bLKVht8xxKbobF0cmKxN0BCW9SwIgPlCu4GqM6C+sRBsHjayO\r\n"  \
+"VrSVNcAzopUqf9Vb1VZTwysAdgBByMqx3yJGShDGoToJQodeTjGLGwPr60vHaPCQ\r\n"  \
+"YpYG9gAAAXFmkYORAAAEAwBHMEUCIQDmsOIqY05G23bz4l+Fj5tFM8JzH2bV1biF\r\n"  \
+"TrCRQKj8VgIgN+jr9st1aLmtI9sp1US7cHTgzGz242n8Oq1e2fc1lz4wDQYJKoZI\r\n"  \
+"hvcNAQELBQADggEBAAvZTk4F39nw30fFjzn4CPU2hZOR6JMitqDavHDGPmiCAyr+\r\n"  \
+"/gs+QQhOhkW8IdFuZ8uvdrQuX/uqWEDgmFQCqglI1ojm0j/LqOpAVmugo7QpUwi9\r\n"  \
+"pZ0U9/8atrvRxjaoykQXEKyrYkYuAKXdYgo2zpCXhTtVcqfDW27/3FO2Ydd6oXwi\r\n"  \
+"d4xZbBID86GXSf0ri4wOTT+7U1kCzeFSoViVgZiRgBkJRqcZtxxj4C1G/aDfcm09\r\n"  \
+"tZxKOotOoR7JvYRw50t/yW+Gs9ailgquXULv2R6mwV7f/WixJIxJt0yv85Dn7mgI\r\n"  \
+"0lebhyIGOv+jUOaKn5s/ltGYLrAE/QM3GkGO704=\r\n"  \
+"-----END CERTIFICATE----- \r\n"                \
+"-----BEGIN CERTIFICATE----- \r\n" \
+"MIIElDCCA3ygAwIBAgIQAf2j627KdciIQ4tyS8+8kTANBgkqhkiG9w0BAQsFADBhMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBDQTAeFw0xMzAzMDgxMjAwMDBaFw0yMzAzMDgxMjAwMDBaME0xCzAJBgNVBAYTAlVTMRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxJzAlBgNVBAMTHkRpZ2lDZXJ0IFNIQTIgU2VjdXJlIFNlcnZlciBDQTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBANyuWJBNwcQwFZA1W248ghX1LFy949v/cUP6ZCWA1O4Yok3wZtAKc24RmDYXZK83nf36QYSvx6+M/hpzTc8zl5CilodTgyu5pnVILR1WN3vaMTIa16yrBvSqXUu3R0bdKpPDkC55gIDvEwRqFDu1m5K+wgdlTvza/P96rtxcflUxDOg5B6TXvi/TC2rSsd9f/ld0Uzs1gN2ujkSYs58O09rg1/RrKatEp0tYhG2SS4HD2nOLEpdIkARFdRrdNzGXkujNVA075ME/OV4uuPNcfhCOhkEAjUVmR7ChZc6gqikJTvOX6+guqw9ypzAO+sf0/RR3w6RbKFfCs/mC/bdFWJsCAwEAAaOCAVowggFWMBIGA1UdEwEB/wQIMAYBAf8CAQAwDgYDVR0PAQH/BAQDAgGGMDQGCCsGAQUFBwEBBCgwJjAkBggrBgEFBQcwAYYYaHR0cDovL29jc3AuZGlnaWNlcnQuY29tMHsGA1UdHwR0MHIwN6A1oDOGMWh0dHA6Ly9jcmwzLmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydEdsb2JhbFJvb3RDQS5jcmwwN6A1oDOGMWh0dHA6Ly9jcmw0LmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydEdsb2JhbFJvb3RDQS5jcmwwPQYDVR0gBDYwNDAyBgRVHSAAMCowKAYIKwYBBQUHAgEWHGh0dHBzOi8vd3d3LmRpZ2ljZXJ0LmNvbS9DUFMwHQYDVR0OBBYEFA+AYRyCMWHVLyjnjUY4tCzhxtniMB8GA1UdIwQYMBaAFAPeUDVW0Uy7ZvCj4hsbw5eyPdFVMA0GCSqGSIb3DQEBCwUAA4IBAQAjPt9L0jFCpbZ+QlwaRMxp0Wi0XUvgBCFsS+JtzLHgl4+mUwnNqipl5TlPHoOlblyYoiQm5vuh7ZPHLgLGTUq/sELfeNqzqPlt/yGFUzZgTHbO7Djc1lGA8MXW5dRNJ2Srm8c+cftIl7gzbckTB+6WohsYFfZcTEDts8Ls/3HB40f/1LkAtDdC2iDJ6m6K7hQGrn2iWZiIqBtvLfTyyRRfJs8sjX7tN8Cp1Tm5gr8ZDOo0rwAhaPitc+LJMto4JQtV05od8GiG7S5BNO98pVAdvzr508EIDObtHopYJeS4d60tbvVS3bR0j6tJLp07kzQoH3jOlOrHvdPJbRzeXDLz\r\n" \
+"-----END CERTIFICATE----- \r\n" \
+"-----BEGIN CERTIFICATE----- \r\n" \
+"MIIDrzCCApegAwIBAgIQCDvgVpBCRrGhdWrJWZHHSjANBgkqhkiG9w0BAQUFADBhMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBDQTAeFw0wNjExMTAwMDAwMDBaFw0zMTExMTAwMDAwMDBaMGExCzAJBgNVBAYTAlVTMRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5jb20xIDAeBgNVBAMTF0RpZ2lDZXJ0IEdsb2JhbCBSb290IENBMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4jvhEXLeqKTTo1eqUKKPC3eQyaKl7hLOllsBCSDMAZOnTjC3U/dDxGkAV53ijSLdhwZAAIEJzs4bg7/fzTtxRuLWZscFs3YnFo97nh6Vfe63SKMI2tavegw5BmV/Sl0fvBf4q77uKNd0f3p4mVmFaG5cIzJLv07A6Fpt43C/dxC//AH2hdmoRBBYMql1GNXRor5H4idq9Joz+EkIYIvUX7Q6hL+hqkpMfT7PT19sdl6gSzeRntwi5m3OFBqOasv+zbMUZBfHWymeMr/y7vrTC0LUq7dBMtoM1O/4gdW7jVg/tRvoSSiicNoxBN33shbyTApOB6jtSj1etX+jkMOvJwIDAQABo2MwYTAOBgNVHQ8BAf8EBAMCAYYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUA95QNVbRTLtm8KPiGxvDl7I90VUwHwYDVR0jBBgwFoAUA95QNVbRTLtm8KPiGxvDl7I90VUwDQYJKoZIhvcNAQEFBQADggEBAMucN6pIExIK+t1EnE9SsPTfrgT1eXkIoyQY/EsrhMAtudXH/vTBH1jLuG2cenTnmCmrEbXjcKChzUyImZOMkXDiqw8cvpOp/2PV5Adg06O/nVsJ8dWO41P0jmP6P6fbtGbfYmbW0W5BjfIttep3Sp+dWOIrWcBAI+0tKIJFPnlUkiaY4IBIqDfv8NZ5YBberOgOzW6sRBc4L0na4UU+Krk2U886UAb3LujEV0lsYSEY1QSteDwsOoBrp+uvFRTp2InBuThs4pFsiv9kuXclVzDAGySj4dzp30d8tbQkCAUw7C29C79Fv1C5qfPrmAESrciIxpg0X40KPMbp1ZWVbd4=\r\n" \
+"-----END CERTIFICATE----- \r\n"
+
+const char MyBlueMixNetPem[] = MYBLUEMIX_PEM;
 
 // Timezone info
 #define TZ_OFFSET -5  // (EST) Hours timezone offset to GMT (without daylight saving time)
@@ -46,7 +97,11 @@ PubSubClient mqtt(MQTT_HOST, MQTT_PORT, callback, wifiClient);
 #endif
 #define ETH_CLK_MODE ETH_CLOCK_GPIO17_OUT
 // Pin# of the enable signal for the external crystal oscillator (-1 to disable for internal APLL source)
-#define ETH_POWER_PIN   2
+#ifdef  PRODUCTION_BOARD
+#define ETH_POWER_PIN    2  // Ethernet on production board
+#else
+#define ETH_POWER_PIN   -1  // Ethernet on prototype board
+#endif
 // Type of the Ethernet PHY (LAN8720 or TLK110)
 #define ETH_TYPE        ETH_PHY_LAN8720
 // I²C-address of Ethernet PHY (0 or 1 for LAN8720, 31 for TLK110)
@@ -249,9 +304,23 @@ bool FirmwareVersionCheck( char *firmware_latest, String firmware_ota_url ) {
     // OTA upgrade is required
     Serial.println("An OTA upgrade is required. Download the new OpenEEW firmware :");
     Serial.println(firmware_ota_url);
-    // Launch an OTA upgrade here...
+    // Launch an OTA upgrade
     NeoPixelStatus( LED_FIRMWARE_OTA ); // blink magenta
+
+    // Serial.println( MyBlueMixNetPem );
+
+    esp_http_client_config_t config = {0};
+    config.url = firmware_ota_url.c_str() ;
+    config.cert_pem = MyBlueMixNetPem ;
+    esp_err_t ret = esp_https_ota(&config);
+    if (ret == ESP_OK) {
+        Serial.println("OTA upgrade downloaded. Restarting...");
+        esp_restart();
+    } else {
+        Serial.println("The OpenEEW OTA firmware upgrade failed : ESP_FAIL");
+    }
   }
+
   // Free allocated memory when we're done
   semver_free(&current_version);
   semver_free(&latest_version);
