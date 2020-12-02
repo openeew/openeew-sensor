@@ -185,7 +185,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
     if ( strcmp(topic, MQTT_TOPIC_ALARM) == 0 ) {
       // Sound the Buzzer & Blink the LED
       Serial.println("Earthquake Alarm!");
-
+      for( int i=0;i<4;i++){
+        delay(500);
+        NeoPixelStatus( LED_ERROR ); // Alarm - blink red
+      }
     } else if ( strcmp(topic, MQTT_TOPIC_SAMPLERATE) == 0 ) {
       // Set the ADXL355 Sample Rate
       int32_t NewSampleRate = 0;
