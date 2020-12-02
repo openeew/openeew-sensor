@@ -349,13 +349,14 @@ bool OpenEEWDeviceActivation() {
   Serial.println("Contacting the OpenEEW Device Activation Endpoint :");
   Serial.println(OPENEEW_ACTIVATION_ENDPOINT);
 
+/*
   float lat, lng ;
   GetGeoCoordinates( &lat, &lng );
   Serial.print("GetGeoCoordinates() reported latitude,longitude : ");
   Serial.print(lat,5);
   Serial.print(",");
   Serial.println(lng,5);
-
+*/
   HTTPClient http;
   // Domain name with URL path or IP address with path
   http.begin( OPENEEW_ACTIVATION_ENDPOINT );
@@ -368,8 +369,8 @@ bool OpenEEWDeviceActivation() {
   DynamicJsonDocument httpSendDoc(120);
   String httpRequestData;
   httpSendDoc["macaddress"] = deviceID;
-  httpSendDoc["lat"] = lat;
-  httpSendDoc["lng"] = lng;
+  //httpSendDoc["lat"] = lat;
+  //httpSendDoc["lng"] = lng;
   httpSendDoc["firmware_device"] = OPENEEW_FIRMWARE_VERSION;
   // Serialize the entire string to be transmitted
   serializeJson(httpSendDoc, httpRequestData);
