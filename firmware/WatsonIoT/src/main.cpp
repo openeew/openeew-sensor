@@ -185,7 +185,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
     if ( strcmp(topic, MQTT_TOPIC_ALARM) == 0 ) {
       // Sound the Buzzer & Blink the LED
       Serial.println("Earthquake Alarm!");
-
+      for( int i=0;i<4;i++){
+        delay(500);
+        NeoPixelStatus( LED_ERROR ); // Alarm - blink red
+      }
     } else if ( strcmp(topic, MQTT_TOPIC_SAMPLERATE) == 0 ) {
       // Set the ADXL355 Sample Rate
       int32_t NewSampleRate = 0;
@@ -204,6 +207,12 @@ void callback(char* topic, byte* payload, unsigned int length) {
         SampleRateChanged = true;
         odr_lpf = Adxl355::ODR_LPF::ODR_125_AND_31_25;
         sr = 125.0;
+      } else if ( NewSampleRate == 0 ) {
+        // Turn off the sensor ADXL
+        Adxl355SampleRate = 0;
+        SampleRateChanged = false; // false so the code below doesn't restart it
+        Serial.println("Stopping the ADXL355");
+        adxl355.stop();
       } else {
         // invalid - leave the Sample Rate unchanged
       }
@@ -340,13 +349,14 @@ bool OpenEEWDeviceActivation() {
   Serial.println("Contacting the OpenEEW Device Activation Endpoint :");
   Serial.println(OPENEEW_ACTIVATION_ENDPOINT);
 
+/*
   float lat, lng ;
   GetGeoCoordinates( &lat, &lng );
   Serial.print("GetGeoCoordinates() reported latitude,longitude : ");
   Serial.print(lat,5);
   Serial.print(",");
   Serial.println(lng,5);
-
+*/
   HTTPClient http;
   // Domain name with URL path or IP address with path
   http.begin( OPENEEW_ACTIVATION_ENDPOINT );
@@ -359,8 +369,8 @@ bool OpenEEWDeviceActivation() {
   DynamicJsonDocument httpSendDoc(120);
   String httpRequestData;
   httpSendDoc["macaddress"] = deviceID;
-  httpSendDoc["lat"] = lat;
-  httpSendDoc["lng"] = lng;
+  //httpSendDoc["lat"] = lat;
+  //httpSendDoc["lng"] = lng;
   httpSendDoc["firmware_device"] = OPENEEW_FIRMWARE_VERSION;
   // Serialize the entire string to be transmitted
   serializeJson(httpSendDoc, httpRequestData);
