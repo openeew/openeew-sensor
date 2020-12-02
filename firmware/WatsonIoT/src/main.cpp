@@ -204,6 +204,12 @@ void callback(char* topic, byte* payload, unsigned int length) {
         SampleRateChanged = true;
         odr_lpf = Adxl355::ODR_LPF::ODR_125_AND_31_25;
         sr = 125.0;
+      } else if ( NewSampleRate == 0 ) {
+        // Turn off the sensor ADXL
+        Adxl355SampleRate = 0;
+        SampleRateChanged = false; // false so the code below doesn't restart it
+        Serial.println("Stopping the ADXL355");
+        adxl355.stop();
       } else {
         // invalid - leave the Sample Rate unchanged
       }
