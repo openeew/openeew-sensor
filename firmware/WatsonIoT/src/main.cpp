@@ -6,7 +6,7 @@
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
 #include <HTTPClient.h>
-#include <Adxl355.h>
+#include <Adxl355.h>  // forked from https://github.com/markrad/esp32-ADXL355
 #include <math.h>
 #include <esp_https_ota.h>
 #include <SPIFFS.h>
@@ -16,8 +16,8 @@
 // --------------------------------------------------------------------------------------------
 //        UPDATE CONFIGURATION TO MATCH YOUR ENVIRONMENT
 // --------------------------------------------------------------------------------------------
-#define OPENEEW_ACTIVATION_ENDPOINT "https://openeew-earthquakes.mybluemix.net/activation?ver=1"
-#define OPENEEW_FIRMWARE_VERSION    "1.1.0"
+#define OPENEEW_ACTIVATION_ENDPOINT "https://openeew-devicemgmt.mybluemix.net/activation?ver=1"
+#define OPENEEW_FIRMWARE_VERSION    "1.2.0"
 
 // Watson IoT connection details
 static char MQTT_HOST[48];            // ORGID.messaging.internetofthings.ibmcloud.com
@@ -570,7 +570,10 @@ void setup() {
 
   wificonnected = WiFiScanAndConnect();
   if( !wificonnected )  {
-    startSmartConfig();
+    while( !startSmartConfig() ) {
+      // loop in SmartConfig until the user provides
+      // the correct WiFi SSID and password
+    }
   }
   Serial.println("WiFi Connected");
 
@@ -895,6 +898,7 @@ bool startSmartConfig()
   }
   else {
     Serial.println("Something went wrong with SmartConfig");
+    WiFi.stopSmartConfig();
     return false;
   }
 }
