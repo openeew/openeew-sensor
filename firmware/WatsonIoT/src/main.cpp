@@ -570,7 +570,10 @@ void setup() {
 
   wificonnected = WiFiScanAndConnect();
   if( !wificonnected )  {
-    startSmartConfig();
+    while( !startSmartConfig() ) {
+      // loop in SmartConfig until the user provides
+      // the correct WiFi SSID and password
+    }
   }
   Serial.println("WiFi Connected");
 
@@ -895,6 +898,7 @@ bool startSmartConfig()
   }
   else {
     Serial.println("Something went wrong with SmartConfig");
+    WiFi.stopSmartConfig();
     return false;
   }
 }
