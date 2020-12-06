@@ -6,7 +6,7 @@
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
 #include <HTTPClient.h>
-#include <Adxl355.h>
+#include <Adxl355.h>  // forked from https://github.com/markrad/esp32-ADXL355
 #include <math.h>
 #include <esp_https_ota.h>
 #include <SPIFFS.h>
