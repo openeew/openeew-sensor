@@ -27,9 +27,9 @@ This example can run using an IBM Cloud Lite account.
 ### Setup
 You will need an FTDI device to program the device. Something like [this](https://www.aliexpress.com/item/32826575637.html?spm=a2g0o.productlist.0.0.20ef16282CTwNw&algo_pvid=97db3d99-6904-47b4-b90d-4787bd56682d&algo_expid=97db3d99-6904-47b4-b90d-4787bd56682d-5&btsid=0ab6fb8815972923937521550efbde&ws_ab_test=searchweb0_0,searchweb201602_,searchweb201603_) should work (please note I have not tested this product).
 
-### Install PlaformIO
+### Install PlatformIO
 
-Follow this guide to [install PlatformIO](https://docs.platformio.org/en/latest/integration/ide/vscode.html#installation) on your machine. PlaformIO offers several benefits to the Arduino IDE, particularly the ability to contain dependencies within a simple folder structure.
+Follow this guide to [install PlatformIO](https://docs.platformio.org/en/latest/integration/ide/vscode.html#installation) on your machine. PlaformIO offers several benefits to the Arduino IDE, particularly the ability to contain dependeWiFi.stopSmartConfig()ncies within a simple folder structure.
 
 ### Open project
 Inside VSCode go to PlaformIO home, which is available on the bottom toolbar, and select `Projects`, then `Open Project`. Navigate to the root folder where you cloned this repository and open.
@@ -38,8 +38,13 @@ Inside VSCode go to PlaformIO home, which is available on the bottom toolbar, an
 Build the project using the check mark on the bottom toolbar, then upload using the arrow button adjacent to it. The IDE should automatically detect the board of your connnected OpenEEW sensor and start to write the new firmware.
 
 To add the certificates and other contents of the `data` folder to the SPIFFS memory, you need to
-open tasks in the PlaformIO menubar on the left, and select `Upload File System image`:
+open tasks in the PlaformIO menubar on the left, and select `Upload FileSystem Image`:
 ![](/images/platformio-spiffs.png)
+
+Alternatively, run this command from the directory which contains min_spiffs.csv
+```
+platformio run --target uploadfs
+```
 
 ### Config.h
 In the config.h file two levels of debugging can be set, first "debug" variable needs to be set true to allow serial communication and only basic status lines are part of the output. Second level is set by making LOG_L2 true, this would give specific output on the WiFi events.
