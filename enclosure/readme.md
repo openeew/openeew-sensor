@@ -22,4 +22,4 @@ The 3d prints have been successfully tested on a Prusa Mini 3d printer. These se
 ## Adding brass screw inserts
 To faciliate frequent removal of the board without damaging the PLA, brass threaded inserts were hot melted into the plastic standoffs on the case. These can be bought from Adafruit, Digikey or other distributers.
 
-![threaded insert](threaded-insert.jpg)
+![threaded insert](images/threaded-insert.jpg)
