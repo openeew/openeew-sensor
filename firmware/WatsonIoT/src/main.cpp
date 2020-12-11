@@ -947,7 +947,7 @@ void NeoPixelStatus( int status ) {
       Serial.println("LED_FIRMWARE_DFU - Yellow");
       break;
     case LED_ERROR :
-      strip.fill( strip.Color(0,255,0), 0, 3);  // Red
+      strip.fill( strip.Color(255,0,0), 0, 3);  // Red
       Serial.println("LED_ERROR - Red");
       break;
     default :
