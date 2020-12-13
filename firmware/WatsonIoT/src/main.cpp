@@ -30,6 +30,7 @@ static char MQTT_ORGID[7];            // Watson IoT 6 character orgid
 #define MQTT_TOPIC       "iot-2/evt/status/fmt/json"
 #define MQTT_TOPIC_ALARM "iot-2/cmd/earthquake/fmt/json"
 #define MQTT_TOPIC_SAMPLERATE "iot-2/cmd/samplerate/fmt/json"
+#define MQTT_TOPIC_FWCHECK "iot-2/cmd/firmwarecheck/fmt/json"
 char deviceID[13];
 
 // Store the .mybluemix.net Server PEM and Digicert CA and Root CA in SPIFFS
@@ -44,6 +45,9 @@ char deviceID[13];
 void callback(char* topic, byte* payload, unsigned int length);
 WiFiClientSecure wifiClient;
 PubSubClient mqtt(MQTT_HOST, MQTT_PORT, callback, wifiClient);
+
+// Activation
+bool OpenEEWDeviceActivation();
 
 // ETH_CLOCK_GPIO17_OUT - 50MHz clock from internal APLL inverted output on GPIO17 - tested with LAN8720
 #ifdef ETH_CLK_MODE
@@ -189,6 +193,17 @@ void callback(char* topic, byte* payload, unsigned int length) {
         delay(500);
         NeoPixelStatus( LED_ERROR ); // Alarm - blink red
       }
+    } else if ( strcmp(topic, MQTT_TOPIC_FWCHECK) == 0 ) {
+      // Remote message received to check for new firmware
+      // If a device is running for many months it might fall behind on the version of the
+      // firmware it is running. As part of the ESP32 power up / activation process,
+      // the board does a firmware version check. If there is a newer firmware version
+      // it initiates an OTA firmware update. That only happens on startup.
+      // A board that has been running for a long time might be stranded on an old version.
+      // The administrator/device owner has asked the board to check for a firmware update.
+      // That would let us dynamically update sensors if there was a security / software flaw.
+      NeoPixelStatus( LED_FIRMWARE_OTA ); // Firmware OTA - Magenta
+      OpenEEWDeviceActivation();
     } else if ( strcmp(topic, MQTT_TOPIC_SAMPLERATE) == 0 ) {
       // Set the ADXL355 Sample Rate
       int32_t NewSampleRate = 0;
@@ -341,7 +356,6 @@ void GetGeoCoordinates( float *latitude, float *longitude) {
 
 
 // Call the OpenEEW Device Activation endpoint to retrieve MQTT OrgID
-bool OpenEEWDeviceActivation();
 bool OpenEEWDeviceActivation() {
   // OPENEEW_ACTIVATION_ENDPOINT "https://openeew-earthquakes.mybluemix.net/activation?ver=1"
   // $ curl -i  -X POST -d '{"macaddress":"112233445566","lat":40,"lng":-74,"firmware_device":"1.0.0"}'
@@ -428,6 +442,7 @@ void Connect2MQTTbroker() {
       Serial.println("MQTT Connected");
       mqtt.subscribe(MQTT_TOPIC_ALARM);
       mqtt.subscribe(MQTT_TOPIC_SAMPLERATE);
+      mqtt.subscribe(MQTT_TOPIC_FWCHECK);
       mqtt.setBufferSize(2000);
       mqtt.loop();
     } else {
