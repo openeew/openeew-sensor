@@ -508,9 +508,8 @@ void NetworkEvent(WiFiEvent_t event) {
       // Disconnect the MQTT session
       if( mqtt.connected() ){
         mqtt.disconnect();
-        // Handled at a lower level?
-        // mqtt.setClient(ETH); // Fails. wifiClient might still be valid
-        Connect2MQTTbroker();
+        // No need to call mqtt.setClient(ETH); because ETH is a ETHClient which is not the same class as WiFi client
+        // Connect2MQTTbroker(); // The MQTT reconnect will be handled by the main loop()
       }
       break;
     case SYSTEM_EVENT_ETH_DISCONNECTED:
