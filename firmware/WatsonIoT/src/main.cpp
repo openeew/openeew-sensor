@@ -17,7 +17,7 @@
 //        UPDATE CONFIGURATION TO MATCH YOUR ENVIRONMENT
 // --------------------------------------------------------------------------------------------
 #define OPENEEW_ACTIVATION_ENDPOINT "https://openeew-devicemgmt.mybluemix.net/activation?ver=1"
-#define OPENEEW_FIRMWARE_VERSION    "1.2.0"
+#define OPENEEW_FIRMWARE_VERSION    "1.3.0"
 
 // Watson IoT connection details
 static char MQTT_HOST[48];            // ORGID.messaging.internetofthings.ibmcloud.com
