@@ -12,6 +12,7 @@
 #include <SPIFFS.h>
 #include "config.h"
 #include "semver.h"  // from https://github.com/h2non/semver.c
+#include <cppQueue.h>
 
 // --------------------------------------------------------------------------------------------
 //        UPDATE CONFIGURATION TO MATCH YOUR ENVIRONMENT
@@ -77,13 +78,7 @@ int networksStored;
 static bool eth_connected = false;
 static bool wificonnected = false;
 
-// variables to hold accelerometer data
-StaticJsonDocument<100> jsonReceiveDoc;
-DynamicJsonDocument jsonDoc(4000);
-DynamicJsonDocument jsonTraces(4000);
-JsonArray traces = jsonTraces.to<JsonArray>();
-static char msg[2000];
-
+// --------------------------------------------------------------------------------------------
 // ADXL Accelerometer
 void IRAM_ATTR isr_adxl();
 
@@ -98,21 +93,30 @@ int8_t ADXL_INT_PIN = 2;  // ADXL is on interrupt 2 on prototype board
 Adxl355::RANGE_VALUES range = Adxl355::RANGE_VALUES::RANGE_2G;
 Adxl355::ODR_LPF odr_lpf;
 Adxl355::STATUS_VALUES adxstatus;
+Adxl355 adxl355(CHIP_SELECT_PIN_ADXL);
+SPIClass *spi1 = NULL;
 
 bool deviceRecognized = false;
 long fifoOut[32][3];
-int  numEntriesFifo = 0;
 long runningAverage[3] = {0, 0, 0};
-long sumFifo[3];
 long fifoDelta[32][3];
 bool fifoFull = false;
 int  fifoCount = 0;
 int  numValsForAvg = 0;
-// static int id = 0;
 
-Adxl355 adxl355(CHIP_SELECT_PIN_ADXL);
-SPIClass *spi1 = NULL;
-double sr = 0;
+// --------------------------------------------------------------------------------------------
+// Variables to hold accelerometer data
+StaticJsonDocument<100> jsonReceiveDoc;
+DynamicJsonDocument jsonDoc(4000);
+DynamicJsonDocument jsonTraces(4000);
+JsonArray traces = jsonTraces.to<JsonArray>();
+static char msg[2000];
+
+// 10 second FIFO queue for STA / LTA algorithm
+typedef struct AccelXYZ {
+  long x; long y; long z;
+} AccelReading ;
+cppQueue StaLtaQue( sizeof( AccelReading ), 960, FIFO );
 
 // --------------------------------------------------------------------------------------------
 // SmartConfig
@@ -215,13 +219,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
         Adxl355SampleRate = 31;
         SampleRateChanged = true;
         odr_lpf = Adxl355::ODR_LPF::ODR_31_25_AND_7_813;
-        sr = 31.25;
       } else if ( NewSampleRate == 125 ) {
         // Requested sample rate of 125 is valid
         Adxl355SampleRate = 125;
         SampleRateChanged = true;
         odr_lpf = Adxl355::ODR_LPF::ODR_125_AND_31_25;
-        sr = 125.0;
       } else if ( NewSampleRate == 0 ) {
         // Turn off the sensor ADXL
         Adxl355SampleRate = 0;
@@ -635,12 +637,10 @@ void setup() {
 
 #if OPENEEW_SAMPLE_RATE_125
   odr_lpf = Adxl355::ODR_LPF::ODR_125_AND_31_25;
-  sr = 125.0;
 #endif
 
 #if OPENEEW_SAMPLE_RATE_31_25
   odr_lpf = Adxl355::ODR_LPF::ODR_31_25_AND_7_813;
-  sr = 31.25;
 #endif
 
   pinMode(ADXL_INT_PIN, INPUT);
@@ -664,7 +664,9 @@ void loop() {
     adxstatus = adxl355.getStatus();
 
     if (adxstatus & Adxl355::STATUS_VALUES::FIFO_FULL) {
-      if (-1 != (numEntriesFifo = adxl355.readFifoEntries((long *)fifoOut))) {
+      int numEntriesFifo = adxl355.readFifoEntries( (long *)fifoOut ) ;
+      if ( numEntriesFifo != -1 ) {
+        long sumFifo[3];
         sumFifo[0] = 0;
         sumFifo[1] = 0;
         sumFifo[2] = 0;
@@ -688,16 +690,38 @@ void loop() {
 
         // [{"x":[9.479,0],"y":[0.128,-1.113],"z":[-0.185,123.321]},{"x":[9.479,0],"y":[0.128,-1.113],"z":[-0.185,123.321]}]
         double gal;
+        long x, y, z;
         for (int i = 0; i < numEntriesFifo; i++) {
+          AccelReading AccelRecord;
           gal = adxl355.valueToGals(fifoDelta[i][0]);
-          acceleration["x"].add(round(gal*1000)/1000);
+          x = round(gal*1000)/1000;
+          acceleration["x"].add(x);
+          AccelRecord.x = x;
 
           gal = adxl355.valueToGals(fifoDelta[i][1]);
-          acceleration["y"].add(round(gal*1000)/1000);
+          y = round(gal*1000)/1000;
+          acceleration["y"].add(y);
+          AccelRecord.y = y;
 
           gal = adxl355.valueToGals(fifoDelta[i][2]);
-          acceleration["z"].add(round(gal*1000)/1000);
+          z = round(gal*1000)/1000;
+          acceleration["z"].add(z);
+          AccelRecord.z = z;
+
+          StaLtaQue.push(&AccelRecord);
         }
+
+        // Do some STA / LTA math here...
+        // ...
+        char mathmsg[65];
+        sprintf(mathmsg, "There are %d accelerometer readings on the StaLta Queue", StaLtaQue.getCount());
+        Serial.println(mathmsg);
+        // When the math is done, drop 32 records off the queue
+        if( StaLtaQue.isFull() ) {
+          for( int i=0; i < 32; i++ )
+            StaLtaQue.drop();
+        }
+
         //serializeJson(traces, Serial);
         //Serial.println("");
         fifoCount++;
@@ -717,7 +741,7 @@ void loop() {
 
           // Serialize the entire string to be transmitted
           serializeJson(jsonDoc, msg, 2000);
-          Serial.println(msg);
+          //Serial.println(msg);
 
           // Publish the message to MQTT Broker
           if (!mqtt.publish(MQTT_TOPIC, msg)) {
@@ -728,7 +752,6 @@ void loop() {
 
           // Reset fifoCount and fifoMessage
           fifoCount = 0;
-          // id++;
           jsonDoc.clear();
           jsonTraces.clear();
           traces = jsonTraces.to<JsonArray>();

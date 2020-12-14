@@ -1,7 +1,6 @@
 #define OPENEEW_SAMPLE_RATE_125 false
 #define OPENEEW_SAMPLE_RATE_31_25 true
 
-#define PRODUCTION_BOARD
 #define debug true
 
 #define LOG_L2 false //Needs to be true to have logging about deep wifi info
@@ -23,4 +22,5 @@
 #define CONNECTION_TO 6000    //ms
 #define RECONNECTION_TO 10000 //ms
 
-#define MAX_FIFO_COUNT 2
+#define PRODUCTION_BOARD 1
+#define MAX_FIFO_COUNT 1
