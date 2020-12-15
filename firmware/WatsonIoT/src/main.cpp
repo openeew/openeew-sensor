@@ -550,7 +550,7 @@ void SetTimeESP32() {
   configTime(TZ_OFFSET * 3600, TZ_DST * 60, "pool.ntp.org", "0.pool.ntp.org");
   Serial.println("\nWaiting for time");
   while(time(nullptr) <= 100000) {
-    NeoPixelStatus( LED_LISTEN_WIFI ); // blink blue
+    NeoPixelStatus( LED_FIRMWARE_DFU ); // blink yellow
     Serial.print(".");
     delay(100);
   }
