@@ -114,7 +114,7 @@ static char msg[2000];
 
 // 10 second FIFO queue for STA / LTA algorithm
 typedef struct AccelXYZ {
-  long x; long y; long z;
+  double x; double y; double z;
 } AccelReading ;
 cppQueue StaLtaQue( sizeof( AccelReading ), 960, FIFO );
 
@@ -690,7 +690,7 @@ void loop() {
 
         // [{"x":[9.479,0],"y":[0.128,-1.113],"z":[-0.185,123.321]},{"x":[9.479,0],"y":[0.128,-1.113],"z":[-0.185,123.321]}]
         double gal;
-        long x, y, z;
+        double x, y, z;
         for (int i = 0; i < numEntriesFifo; i++) {
           AccelReading AccelRecord;
           gal = adxl355.valueToGals(fifoDelta[i][0]);
