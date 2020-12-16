@@ -28,10 +28,12 @@ static char MQTT_ORGID[7];            // Watson IoT 6 character orgid
 #define MQTT_TOKEN       "OpenEEW-sens0r"   // Watson IoT DeviceId authentication token
 #define MQTT_DEVICETYPE  "OpenEEW"    // Watson IoT DeviceType
 #define MQTT_USER        "use-token-auth"
-#define MQTT_TOPIC       "iot-2/evt/status/fmt/json"
-#define MQTT_TOPIC_ALARM "iot-2/cmd/earthquake/fmt/json"
+#define MQTT_TOPIC            "iot-2/evt/status/fmt/json"
+#define MQTT_TOPIC_ALARM      "iot-2/cmd/earthquake/fmt/json"
 #define MQTT_TOPIC_SAMPLERATE "iot-2/cmd/samplerate/fmt/json"
-#define MQTT_TOPIC_FWCHECK "iot-2/cmd/firmwarecheck/fmt/json"
+#define MQTT_TOPIC_FWCHECK    "iot-2/cmd/firmwarecheck/fmt/json"
+#define MQTT_TOPIC_SEND10SEC  "iot-2/cmd/10secondhistory/fmt/json"
+#define MQTT_TOPIC_SENDACCEL  "iot-2/cmd/sendacceldata/fmt/json"
 char deviceID[13];
 
 // Store the .mybluemix.net Server PEM and Digicert CA and Root CA in SPIFFS
@@ -49,6 +51,10 @@ PubSubClient mqtt(MQTT_HOST, MQTT_PORT, callback, wifiClient);
 
 // Activation
 bool OpenEEWDeviceActivation();
+bool FirmwareVersionCheck( char *, String );
+void SetTimeESP32();
+void SendLiveData2Cloud();
+void Send10Seconds2Cloud();
 
 // ETH_CLOCK_GPIO17_OUT - 50MHz clock from internal APLL inverted output on GPIO17 - tested with LAN8720
 #ifdef ETH_CLK_MODE
@@ -96,7 +102,6 @@ Adxl355::STATUS_VALUES adxstatus;
 Adxl355 adxl355(CHIP_SELECT_PIN_ADXL);
 SPIClass *spi1 = NULL;
 
-bool deviceRecognized = false;
 long fifoOut[32][3];
 long runningAverage[3] = {0, 0, 0};
 long fifoDelta[32][3];
@@ -106,7 +111,6 @@ int  numValsForAvg = 0;
 
 // --------------------------------------------------------------------------------------------
 // Variables to hold accelerometer data
-StaticJsonDocument<100> jsonReceiveDoc;
 DynamicJsonDocument jsonDoc(4000);
 DynamicJsonDocument jsonTraces(4000);
 JsonArray traces = jsonTraces.to<JsonArray>();
@@ -116,7 +120,8 @@ static char msg[2000];
 typedef struct AccelXYZ {
   double x; double y; double z;
 } AccelReading ;
-cppQueue StaLtaQue( sizeof( AccelReading ), 960, FIFO );
+cppQueue StaLtaQue( sizeof( AccelReading ), 352, FIFO );   // 11 seconds of Accelerometer data
+int32_t numSecsOfAccelReadings = 0;
 
 // --------------------------------------------------------------------------------------------
 // SmartConfig
@@ -162,7 +167,6 @@ void StartADXL355() {
   delay(1000);
 
   if (adxl355.isDeviceRecognized()) {
-    deviceRecognized = true;
     Serial.println("Initializing sensor");
     adxl355.initializeSensor(range, odr_lpf, debug);
     Serial.println("Calibrating sensor");
@@ -178,18 +182,19 @@ void StartADXL355() {
 
 // Handle subscribed MQTT topics - Alerts and Sample Rate changes
 void callback(char* topic, byte* payload, unsigned int length) {
+  StaticJsonDocument<100> jsonMQTTReceiveDoc;
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] : ");
 
   payload[length] = 0; // ensure valid content is zero terminated so can treat as c-string
   Serial.println((char *)payload);
-  DeserializationError err = deserializeJson(jsonReceiveDoc, (char *)payload);
+  DeserializationError err = deserializeJson(jsonMQTTReceiveDoc, (char *)payload);
   if (err) {
     Serial.print(F("deserializeJson() failed with code : "));
     Serial.println(err.c_str());
   } else {
-    JsonObject cmdData = jsonReceiveDoc.as<JsonObject>();
+    JsonObject cmdData = jsonMQTTReceiveDoc.as<JsonObject>();
     if ( strcmp(topic, MQTT_TOPIC_ALARM) == 0 ) {
       // Sound the Buzzer & Blink the LED
       Serial.println("Earthquake Alarm!");
@@ -208,6 +213,15 @@ void callback(char* topic, byte* payload, unsigned int length) {
       // That would let us dynamically update sensors if there was a security / software flaw.
       NeoPixelStatus( LED_FIRMWARE_OTA ); // Firmware OTA - Magenta
       OpenEEWDeviceActivation();
+    } else if ( strcmp(topic, MQTT_TOPIC_SEND10SEC) == 0 ) {
+      // Send 10 seconds of accelerometer history
+      Serial.println("Send 10 seconds of accelerometer history to the cloud");
+      Send10Seconds2Cloud() ;
+    } else if ( strcmp(topic, MQTT_TOPIC_SENDACCEL) == 0 ) {
+      // Start sending live accelometer data to the cloud. The payload asks for n seconds of data
+      numSecsOfAccelReadings = cmdData["LiveDataDuration"].as<int32_t>();
+      Serial.print("Send live accelometer data to the cloud (secs):");
+      Serial.println( numSecsOfAccelReadings );
     } else if ( strcmp(topic, MQTT_TOPIC_SAMPLERATE) == 0 ) {
       // Set the ADXL355 Sample Rate
       int32_t NewSampleRate = 0;
@@ -245,7 +259,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
         Serial.println("Restarting");
         StartADXL355();
       }
-      jsonReceiveDoc.clear();
+      jsonMQTTReceiveDoc.clear();
     } else {
       Serial.println("Unknown command received");
     }
@@ -253,7 +267,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
 }
 
 
-bool FirmwareVersionCheck( char *, String );
 bool FirmwareVersionCheck( char *firmware_latest, String firmware_ota_url ) {
   semver_t current_version = {};
   semver_t latest_version = {};
@@ -445,6 +458,8 @@ void Connect2MQTTbroker() {
       mqtt.subscribe(MQTT_TOPIC_ALARM);
       mqtt.subscribe(MQTT_TOPIC_SAMPLERATE);
       mqtt.subscribe(MQTT_TOPIC_FWCHECK);
+      mqtt.subscribe(MQTT_TOPIC_SEND10SEC);
+      mqtt.subscribe(MQTT_TOPIC_SENDACCEL);
       mqtt.setBufferSize(2000);
       mqtt.loop();
     } else {
@@ -452,6 +467,66 @@ void Connect2MQTTbroker() {
       delay(5000);
     }
   }
+}
+
+void Send10Seconds2Cloud() {
+  // DynamicJsonDocument is stored on the heap
+  // Allocate a ArduinoJson buffer large enough to 10 seconds of Accelerometer trace data
+  DynamicJsonDocument bigdoc(16384);  // At least 16384
+
+  // Load the key/value pairs into the serialized ArduinoJSON format
+  JsonObject d = bigdoc.createNestedObject("d");
+  d["device_id"] = "246F28CCE88C";
+
+  JsonArray d_traces = d.createNestedArray("traces");
+
+  JsonObject d_traces_0 = d_traces.createNestedObject();
+  JsonArray d_traces_0_x = d_traces_0.createNestedArray("x");
+  JsonArray d_traces_0_y = d_traces_0.createNestedArray("y");
+  JsonArray d_traces_0_z = d_traces_0.createNestedArray("z");
+
+  // Load the key/value pairs into the serialized ArduinoJSON format
+  //status["device_id"] = deviceID;
+  //status["traces"] = traces;
+
+  // Serialize the entire string to be transmitted
+  //serializeJson(jsonDoc, msg, 2000);
+  //Serial.println(msg);
+
+  // Publish the message to MQTT Broker
+  /*
+  if (!mqtt.publish(MQTT_TOPIC, msg)) {
+    Serial.println("MQTT Publish failed");
+  } else {
+    NeoPixelStatus( LED_CONNECTED ); // Success - blink cyan
+  }
+  */
+
+  bigdoc.clear();
+}
+
+void SendLiveData2Cloud() {
+  // variables to hold accelerometer data
+  // DynamicJsonDocument is stored on the heap
+  JsonObject payload = jsonDoc.to<JsonObject>();
+  JsonObject status = payload.createNestedObject("d");
+
+  // Load the key/value pairs into the serialized ArduinoJSON format
+  status["device_id"] = deviceID;
+  status["traces"] = traces;
+
+  // Serialize the entire string to be transmitted
+  serializeJson(jsonDoc, msg, 2000);
+  Serial.println(msg);
+
+  // Publish the message to MQTT Broker
+  if (!mqtt.publish(MQTT_TOPIC, msg)) {
+    Serial.println("MQTT Publish failed");
+  } else {
+    NeoPixelStatus( LED_CONNECTED ); // Success - blink cyan
+  }
+
+  jsonDoc.clear();
 }
 
 
@@ -713,6 +788,14 @@ void loop() {
 
         // Do some STA / LTA math here...
         // ...
+        // Whoa - STA/LTA algorithm detected some anomalous shaking
+        bool bPossibleEarthQuake = false ;
+        if( bPossibleEarthQuake ) {
+          // Start sending 5 minutes of live accelerometer data
+          numSecsOfAccelReadings = 300 ;
+          // Send the previous 10 seconds of history to the cloud
+          Send10Seconds2Cloud();
+        }
         char mathmsg[65];
         sprintf(mathmsg, "There are %d accelerometer readings on the StaLta Queue", StaLtaQue.getCount());
         Serial.println(mathmsg);
@@ -722,40 +805,13 @@ void loop() {
             StaLtaQue.drop();
         }
 
-        //serializeJson(traces, Serial);
-        //Serial.println("");
-        fifoCount++;
-
-        if (fifoCount < MAX_FIFO_COUNT) {
-          // Collect two samples
-        } else {
-          // variables to hold accelerometer data
-          // DynamicJsonDocument is stored on the heap
-          JsonObject payload = jsonDoc.to<JsonObject>();
-          JsonObject status = payload.createNestedObject("d");
-
-          // Load the key/value pairs into the serialized ArduinoJSON format
-          status["device_id"] = deviceID;
-          // status["msgId"] = id;
-          status["traces"] = traces;
-
-          // Serialize the entire string to be transmitted
-          serializeJson(jsonDoc, msg, 2000);
-          //Serial.println(msg);
-
-          // Publish the message to MQTT Broker
-          if (!mqtt.publish(MQTT_TOPIC, msg)) {
-            Serial.println("MQTT Publish failed");
-          } else {
-            NeoPixelStatus( LED_CONNECTED ); // Success - blink cyan
-          }
-
-          // Reset fifoCount and fifoMessage
-          fifoCount = 0;
-          jsonDoc.clear();
-          jsonTraces.clear();
-          traces = jsonTraces.to<JsonArray>();
+        if( numSecsOfAccelReadings > 0 ) {
+          SendLiveData2Cloud();
+          numSecsOfAccelReadings-- ;
         }
+        // Clear & Reset JsonArrays
+        jsonTraces.clear();
+        traces = jsonTraces.to<JsonArray>();
       }
     }
   }

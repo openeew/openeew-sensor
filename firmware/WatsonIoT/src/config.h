@@ -23,4 +23,3 @@
 #define RECONNECTION_TO 10000 //ms
 
 #define PRODUCTION_BOARD 1
-#define MAX_FIFO_COUNT 1
