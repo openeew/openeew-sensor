@@ -244,6 +244,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
         SampleRateChanged = false; // false so the code below doesn't restart it
         Serial.println("Stopping the ADXL355");
         adxl355.stop();
+        StaLtaQue.flush() ; // flush the Queue
       } else {
         // invalid - leave the Sample Rate unchanged
       }
@@ -469,41 +470,56 @@ void Connect2MQTTbroker() {
   }
 }
 
+
 void Send10Seconds2Cloud() {
   // DynamicJsonDocument is stored on the heap
   // Allocate a ArduinoJson buffer large enough to 10 seconds of Accelerometer trace data
-  DynamicJsonDocument bigdoc(16384);  // At least 16384
+  DynamicJsonDocument historydoc(16384);
+  JsonObject payload = historydoc.to<JsonObject>();
+  JsonObject status = payload.createNestedObject("d");
+  JsonArray  alltraces = status.createNestedArray("traces");
 
   // Load the key/value pairs into the serialized ArduinoJSON format
-  JsonObject d = bigdoc.createNestedObject("d");
-  d["device_id"] = "246F28CCE88C";
+  status["device_id"] = deviceID ;
 
-  JsonArray d_traces = d.createNestedArray("traces");
+  // Generate an array of json objects that contain x,y,z arrays of 32 floats.
+  // [{"x":[],"y":[],"z":[]},{"x":[],"y":[],"z":[]}]
+  JsonObject acceleration = alltraces.createNestedObject();
 
-  JsonObject d_traces_0 = d_traces.createNestedObject();
-  JsonArray d_traces_0_x = d_traces_0.createNestedArray("x");
-  JsonArray d_traces_0_y = d_traces_0.createNestedArray("y");
-  JsonArray d_traces_0_z = d_traces_0.createNestedArray("z");
+  AccelReading AccelRecord ;
+  //char reading[75];
+  for( uint16_t idx=0; idx < StaLtaQue.getCount(); idx++ ) {
+    if( StaLtaQue.peekIdx( &AccelRecord, idx) ) {
+      //sprintf( reading, "[ x=%3.3f , y=%3.3f , z=%3.3f ]", AccelRecord.x, AccelRecord.y, AccelRecord.z);
+      //Serial.println(reading);
 
-  // Load the key/value pairs into the serialized ArduinoJSON format
-  //status["device_id"] = deviceID;
-  //status["traces"] = traces;
+      acceleration["x"].add(AccelRecord.x);
+      acceleration["y"].add(AccelRecord.y);
+      acceleration["z"].add(AccelRecord.z);
+    }
 
-  // Serialize the entire string to be transmitted
-  //serializeJson(jsonDoc, msg, 2000);
-  //Serial.println(msg);
+  }
+
+  // Serialize the History Json object into a string to be transmitted
+  //serializeJson(historydoc,Serial);  // print to console
+  static char historymsg[16384];;
+  serializeJson(historydoc, historymsg, 16383);
+
+  int jsonSize = measureJson(historydoc);
+  Serial.print("Sending 10 seconds of accelerometer readings in a MQTT packet of size: ");
+  Serial.println( jsonSize );
+  mqtt.setBufferSize( (jsonSize + 50 ));  // increase the MQTT buffer size
 
   // Publish the message to MQTT Broker
-  /*
-  if (!mqtt.publish(MQTT_TOPIC, msg)) {
+  if (!mqtt.publish(MQTT_TOPIC, historymsg)) {
     Serial.println("MQTT Publish failed");
   } else {
     NeoPixelStatus( LED_CONNECTED ); // Success - blink cyan
   }
-  */
 
-  bigdoc.clear();
+  historydoc.clear();
 }
+
 
 void SendLiveData2Cloud() {
   // variables to hold accelerometer data
@@ -797,7 +813,7 @@ void loop() {
           Send10Seconds2Cloud();
         }
         char mathmsg[65];
-        sprintf(mathmsg, "There are %d accelerometer readings on the StaLta Queue", StaLtaQue.getCount());
+        sprintf(mathmsg, "%d accelerometer readings on the StaLta Queue", StaLtaQue.getCount());
         Serial.println(mathmsg);
         // When the math is done, drop 32 records off the queue
         if( StaLtaQue.isFull() ) {
