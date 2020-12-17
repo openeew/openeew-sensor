@@ -741,6 +741,9 @@ void setup() {
   spi1 = new SPIClass(HSPI);
   adxl355.initSPI(*spi1);
   StartADXL355();
+
+  pinMode(5, OUTPUT); // GARETH declare buzzer
+  digitalWrite(5, LOW); // GARETH turn off buzzer
 }
 
 
