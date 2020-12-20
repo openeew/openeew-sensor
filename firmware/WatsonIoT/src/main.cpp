@@ -156,6 +156,14 @@ void NeoPixelStatus( int );
 #define LED_ERROR         9 // Red
 
 // --------------------------------------------------------------------------------------------
+// Buzzer Alarm
+void Alarm();
+int freq = 4000;
+int channel = 0;
+int resolution = 8;
+int io = 5;
+
+// --------------------------------------------------------------------------------------------
 void IRAM_ATTR isr_adxl() {
   fifoFull = true;
   //fifoCount++;
@@ -198,9 +206,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
     if ( strcmp(topic, MQTT_TOPIC_ALARM) == 0 ) {
       // Sound the Buzzer & Blink the LED
       Serial.println("Earthquake Alarm!");
-      for( int i=0;i<4;i++){
+      for( int i=0;i<10;i++) {
         delay(500);
         NeoPixelStatus( LED_ERROR ); // Alarm - blink red
+        Alarm();
       }
     } else if ( strcmp(topic, MQTT_TOPIC_FWCHECK) == 0 ) {
       // Remote message received to check for new firmware
@@ -742,8 +751,10 @@ void setup() {
   adxl355.initSPI(*spi1);
   StartADXL355();
 
-  pinMode(5, OUTPUT); // GARETH declare buzzer
-  digitalWrite(5, LOW); // GARETH turn off buzzer
+  //pinMode(5, OUTPUT);   // GARETH declare buzzer
+  //digitalWrite(5, LOW); // GARETH turn off buzzer
+  ledcSetup(channel, freq, resolution);
+  ledcAttachPin(io, channel);
 }
 
 
@@ -1067,4 +1078,17 @@ void NeoPixelStatus( int status ) {
       break;
   }
   strip.show(); // Send the updated pixel color to the hardware
+}
+
+
+// Generate Buzzer sounds 
+void Alarm() {
+  ledcWrite(channel, 50);
+  delay(100);
+  ledcWrite(channel, 500);
+  delay(100);
+  ledcWrite(channel, 2000);
+  delay(100);
+  ledcWrite(channel, 4000);
+  delay(100);
 }
