@@ -142,6 +142,9 @@ bool startSmartConfig();
 //   NEO_GRB     Pixels are wired for GRB bitstream (most NeoPixel products)
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 void NeoPixelStatus( int );
+void NeoPixelBreathe();
+bool breathedirection = true;
+int  breatheintensity = 1;
 
 // Map the OpenEEW LED status colors to the Particle Photon status colors
 #define LED_OFF           0
@@ -254,6 +257,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
         Serial.println("Stopping the ADXL355");
         adxl355.stop();
         StaLtaQue.flush() ; // flush the Queue
+        strip.clear();  // Off
+        strip.show();
       } else {
         // invalid - leave the Sample Rate unchanged
       }
@@ -268,6 +273,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
         delay(1000);
         Serial.println("Restarting");
         StartADXL355();
+        breatheintensity = 1;
+        breathedirection = true;
       }
       jsonMQTTReceiveDoc.clear();
     } else {
@@ -842,9 +849,18 @@ void loop() {
         // Clear & Reset JsonArrays
         jsonTraces.clear();
         traces = jsonTraces.to<JsonArray>();
+        
+        if( breathedirection ) 
+          breathedirection = false;
+        else
+          breathedirection = true;        
       }
     }
   }
+  if( adxstatus )
+    NeoPixelBreathe();
+  
+  delay(10);
 }
 
 
@@ -1078,6 +1094,20 @@ void NeoPixelStatus( int status ) {
       break;
   }
   strip.show(); // Send the updated pixel color to the hardware
+}
+
+
+void NeoPixelBreathe() {
+  if( breatheintensity < 0) 
+    breatheintensity = 0;
+  strip.setBrightness( breatheintensity );  // slow breathe the LED
+  // Serial.printf("Brightness is %d\n",breatheintensity);
+  strip.fill( strip.Color(0,255,255), 0, 3);
+  strip.show();
+  if( breathedirection )
+    breatheintensity++;
+  else
+    breatheintensity--;
 }
 
 
