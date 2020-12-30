@@ -160,7 +160,8 @@ int  breatheintensity = 1;
 
 // --------------------------------------------------------------------------------------------
 // Buzzer Alarm
-void Alarm();
+void EarthquakeAlarm();
+void AlarmBuzzer();
 int freq = 4000;
 int channel = 0;
 int resolution = 8;
@@ -208,12 +209,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     JsonObject cmdData = jsonMQTTReceiveDoc.as<JsonObject>();
     if ( strcmp(topic, MQTT_TOPIC_ALARM) == 0 ) {
       // Sound the Buzzer & Blink the LED
-      Serial.println("Earthquake Alarm!");
-      for( int i=0;i<10;i++) {
-        delay(500);
-        NeoPixelStatus( LED_ERROR ); // Alarm - blink red
-        Alarm();
-      }
+      EarthquakeAlarm();
     } else if ( strcmp(topic, MQTT_TOPIC_FWCHECK) == 0 ) {
       // Remote message received to check for new firmware
       // If a device is running for many months it might fall behind on the version of the
@@ -758,10 +754,10 @@ void setup() {
   adxl355.initSPI(*spi1);
   StartADXL355();
 
-  //pinMode(5, OUTPUT);   // GARETH declare buzzer
-  //digitalWrite(5, LOW); // GARETH turn off buzzer
   ledcSetup(channel, freq, resolution);
   ledcAttachPin(io, channel);
+  pinMode(io, OUTPUT);
+  digitalWrite(io, LOW); // turn off buzzer
 }
 
 
@@ -850,10 +846,8 @@ void loop() {
         jsonTraces.clear();
         traces = jsonTraces.to<JsonArray>();
         
-        if( breathedirection ) 
-          breathedirection = false;
-        else
-          breathedirection = true;        
+        //Switch the direction of the LEDs
+        breathedirection = breathedirection ? false : true;       
       }
     }
   }
@@ -1104,15 +1098,26 @@ void NeoPixelBreathe() {
   // Serial.printf("Brightness is %d\n",breatheintensity);
   strip.fill( strip.Color(0,255,255), 0, 3);
   strip.show();
-  if( breathedirection )
-    breatheintensity++;
-  else
-    breatheintensity--;
+
+  // Increase or decrease the LED intensity
+  breathedirection ? breatheintensity++ : breatheintensity-- ;
 }
 
 
-// Generate Buzzer sounds 
-void Alarm() {
+// Sound the Buzzer & Blink the LED
+void EarthquakeAlarm() {
+  Serial.println("Earthquake Alarm!");
+  for( int i=0;i<10;i++) {
+    delay(500);
+    NeoPixelStatus( LED_ERROR ); // Alarm - blink red
+    AlarmBuzzer();
+  }
+  digitalWrite(io, LOW); // turn off buzzer
+}
+
+
+// Generate Buzzer sounds
+void AlarmBuzzer() {
   ledcWrite(channel, 50);
   delay(100);
   ledcWrite(channel, 500);
