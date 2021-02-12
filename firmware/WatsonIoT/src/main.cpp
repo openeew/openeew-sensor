@@ -121,7 +121,7 @@ typedef struct AccelXYZ {
   double x; double y; double z;
 } AccelReading ;
 cppQueue StaLtaQue( sizeof( AccelReading ), 352, FIFO );   // 11 seconds of Accelerometer data
-int32_t numSecsOfAccelReadings = 0;
+uint32_t numSecsOfAccelReadings = 0;
 
 // --------------------------------------------------------------------------------------------
 // SmartConfig
@@ -219,7 +219,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
       Send10Seconds2Cloud() ;
     } else if ( strcmp(topic, MQTT_TOPIC_SENDACCEL) == 0 ) {
       // Start sending live accelometer data to the cloud. The payload asks for n seconds of data
-      numSecsOfAccelReadings = cmdData["LiveDataDuration"].as<int32_t>();
+      numSecsOfAccelReadings = cmdData["LiveDataDuration"].as<uint32_t>();
       Serial.print("Send live accelometer data to the cloud (secs):");
       Serial.println( numSecsOfAccelReadings );
     } else if ( strcmp(topic, MQTT_TOPIC_SAMPLERATE) == 0 ) {
