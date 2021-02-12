@@ -142,6 +142,9 @@ bool startSmartConfig();
 //   NEO_GRB     Pixels are wired for GRB bitstream (most NeoPixel products)
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 void NeoPixelStatus( int );
+void NeoPixelBreathe();
+bool breathedirection = true;
+int  breatheintensity = 1;
 
 // Map the OpenEEW LED status colors to the Particle Photon status colors
 #define LED_OFF           0
@@ -154,6 +157,15 @@ void NeoPixelStatus( int );
 #define LED_SAFE_MODE     7 // Magenta breath
 #define LED_FIRMWARE_DFU  8 // Yellow
 #define LED_ERROR         9 // Red
+
+// --------------------------------------------------------------------------------------------
+// Buzzer Alarm
+void EarthquakeAlarm();
+void AlarmBuzzer();
+int freq = 4000;
+int channel = 0;
+int resolution = 8;
+int io = 5;
 
 // --------------------------------------------------------------------------------------------
 void IRAM_ATTR isr_adxl() {
@@ -197,11 +209,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     JsonObject cmdData = jsonMQTTReceiveDoc.as<JsonObject>();
     if ( strcmp(topic, MQTT_TOPIC_ALARM) == 0 ) {
       // Sound the Buzzer & Blink the LED
-      Serial.println("Earthquake Alarm!");
-      for( int i=0;i<4;i++){
-        delay(500);
-        NeoPixelStatus( LED_ERROR ); // Alarm - blink red
-      }
+      EarthquakeAlarm();
     } else if ( strcmp(topic, MQTT_TOPIC_FWCHECK) == 0 ) {
       // Remote message received to check for new firmware
       // If a device is running for many months it might fall behind on the version of the
@@ -245,6 +253,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
         Serial.println("Stopping the ADXL355");
         adxl355.stop();
         StaLtaQue.flush() ; // flush the Queue
+        strip.clear();  // Off
+        strip.show();
       } else {
         // invalid - leave the Sample Rate unchanged
       }
@@ -259,6 +269,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
         delay(1000);
         Serial.println("Restarting");
         StartADXL355();
+        breatheintensity = 1;
+        breathedirection = true;
       }
       jsonMQTTReceiveDoc.clear();
     } else {
@@ -742,8 +754,10 @@ void setup() {
   adxl355.initSPI(*spi1);
   StartADXL355();
 
-  pinMode(5, OUTPUT); // GARETH declare buzzer
-  digitalWrite(5, LOW); // GARETH turn off buzzer
+  ledcSetup(channel, freq, resolution);
+  ledcAttachPin(io, channel);
+  pinMode(io, OUTPUT);
+  digitalWrite(io, LOW); // turn off buzzer
 }
 
 
@@ -831,9 +845,16 @@ void loop() {
         // Clear & Reset JsonArrays
         jsonTraces.clear();
         traces = jsonTraces.to<JsonArray>();
+        
+        //Switch the direction of the LEDs
+        breathedirection = breathedirection ? false : true;       
       }
     }
   }
+  if( adxstatus )
+    NeoPixelBreathe();
+  
+  delay(10);
 }
 
 
@@ -1067,4 +1088,42 @@ void NeoPixelStatus( int status ) {
       break;
   }
   strip.show(); // Send the updated pixel color to the hardware
+}
+
+
+void NeoPixelBreathe() {
+  if( breatheintensity < 0) 
+    breatheintensity = 0;
+  strip.setBrightness( breatheintensity );  // slow breathe the LED
+  // Serial.printf("Brightness is %d\n",breatheintensity);
+  strip.fill( strip.Color(0,255,255), 0, 3);
+  strip.show();
+
+  // Increase or decrease the LED intensity
+  breathedirection ? breatheintensity++ : breatheintensity-- ;
+}
+
+
+// Sound the Buzzer & Blink the LED
+void EarthquakeAlarm() {
+  Serial.println("Earthquake Alarm!");
+  for( int i=0;i<10;i++) {
+    delay(500);
+    NeoPixelStatus( LED_ERROR ); // Alarm - blink red
+    AlarmBuzzer();
+  }
+  digitalWrite(io, LOW); // turn off buzzer
+}
+
+
+// Generate Buzzer sounds
+void AlarmBuzzer() {
+  ledcWrite(channel, 50);
+  delay(100);
+  ledcWrite(channel, 500);
+  delay(100);
+  ledcWrite(channel, 2000);
+  delay(100);
+  ledcWrite(channel, 4000);
+  delay(100);
 }
