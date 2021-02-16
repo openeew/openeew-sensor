@@ -18,13 +18,13 @@
 //        UPDATE CONFIGURATION TO MATCH YOUR ENVIRONMENT
 // --------------------------------------------------------------------------------------------
 #define OPENEEW_ACTIVATION_ENDPOINT "https://openeew-devicemgmt.mybluemix.net/activation?ver=1"
-#define OPENEEW_FIRMWARE_VERSION    "1.3.0"
+#define OPENEEW_FIRMWARE_VERSION    "1.4.0"
 
 // Watson IoT connection details
 static char MQTT_HOST[48];            // ORGID.messaging.internetofthings.ibmcloud.com
 static char MQTT_DEVICEID[30];        // Allocate a buffer large enough for "d:orgid:devicetype:deviceid"
 static char MQTT_ORGID[7];            // Watson IoT 6 character orgid
-#define MQTT_PORT        8883         // Secure MQTT 8883 / Insecure MQTT 1833
+#define MQTT_PORT        8883         // Secure MQTT 8883 / Insecure MQTT 1883
 #define MQTT_TOKEN       "OpenEEW-sens0r"   // Watson IoT DeviceId authentication token
 #define MQTT_DEVICETYPE  "OpenEEW"    // Watson IoT DeviceType
 #define MQTT_USER        "use-token-auth"
@@ -845,15 +845,15 @@ void loop() {
         // Clear & Reset JsonArrays
         jsonTraces.clear();
         traces = jsonTraces.to<JsonArray>();
-        
+
         //Switch the direction of the LEDs
-        breathedirection = breathedirection ? false : true;       
+        breathedirection = breathedirection ? false : true;
       }
     }
   }
   if( adxstatus )
     NeoPixelBreathe();
-  
+
   delay(10);
 }
 
