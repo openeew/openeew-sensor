@@ -12,12 +12,13 @@
 #include <SPIFFS.h>
 #include "config.h"
 #include "semver.h"  // from https://github.com/h2non/semver.c
+#include <cppQueue.h>
 
 // --------------------------------------------------------------------------------------------
 //        UPDATE CONFIGURATION TO MATCH YOUR ENVIRONMENT
 // --------------------------------------------------------------------------------------------
 #define OPENEEW_ACTIVATION_ENDPOINT "https://openeew-devicemgmt.mybluemix.net/activation?ver=1"
-#define OPENEEW_FIRMWARE_VERSION    "1.2.0"
+#define OPENEEW_FIRMWARE_VERSION    "1.3.0"
 
 // Watson IoT connection details
 static char MQTT_HOST[48];            // ORGID.messaging.internetofthings.ibmcloud.com
@@ -27,9 +28,12 @@ static char MQTT_ORGID[7];            // Watson IoT 6 character orgid
 #define MQTT_TOKEN       "OpenEEW-sens0r"   // Watson IoT DeviceId authentication token
 #define MQTT_DEVICETYPE  "OpenEEW"    // Watson IoT DeviceType
 #define MQTT_USER        "use-token-auth"
-#define MQTT_TOPIC       "iot-2/evt/status/fmt/json"
-#define MQTT_TOPIC_ALARM "iot-2/cmd/earthquake/fmt/json"
+#define MQTT_TOPIC            "iot-2/evt/status/fmt/json"
+#define MQTT_TOPIC_ALARM      "iot-2/cmd/earthquake/fmt/json"
 #define MQTT_TOPIC_SAMPLERATE "iot-2/cmd/samplerate/fmt/json"
+#define MQTT_TOPIC_FWCHECK    "iot-2/cmd/firmwarecheck/fmt/json"
+#define MQTT_TOPIC_SEND10SEC  "iot-2/cmd/10secondhistory/fmt/json"
+#define MQTT_TOPIC_SENDACCEL  "iot-2/cmd/sendacceldata/fmt/json"
 char deviceID[13];
 
 // Store the .mybluemix.net Server PEM and Digicert CA and Root CA in SPIFFS
@@ -44,6 +48,13 @@ char deviceID[13];
 void callback(char* topic, byte* payload, unsigned int length);
 WiFiClientSecure wifiClient;
 PubSubClient mqtt(MQTT_HOST, MQTT_PORT, callback, wifiClient);
+
+// Activation
+bool OpenEEWDeviceActivation();
+bool FirmwareVersionCheck( char *, String );
+void SetTimeESP32();
+void SendLiveData2Cloud();
+void Send10Seconds2Cloud();
 
 // ETH_CLOCK_GPIO17_OUT - 50MHz clock from internal APLL inverted output on GPIO17 - tested with LAN8720
 #ifdef ETH_CLK_MODE
@@ -73,13 +84,7 @@ int networksStored;
 static bool eth_connected = false;
 static bool wificonnected = false;
 
-// variables to hold accelerometer data
-StaticJsonDocument<100> jsonReceiveDoc;
-DynamicJsonDocument jsonDoc(4000);
-DynamicJsonDocument jsonTraces(4000);
-JsonArray traces = jsonTraces.to<JsonArray>();
-static char msg[2000];
-
+// --------------------------------------------------------------------------------------------
 // ADXL Accelerometer
 void IRAM_ATTR isr_adxl();
 
@@ -94,21 +99,29 @@ int8_t ADXL_INT_PIN = 2;  // ADXL is on interrupt 2 on prototype board
 Adxl355::RANGE_VALUES range = Adxl355::RANGE_VALUES::RANGE_2G;
 Adxl355::ODR_LPF odr_lpf;
 Adxl355::STATUS_VALUES adxstatus;
+Adxl355 adxl355(CHIP_SELECT_PIN_ADXL);
+SPIClass *spi1 = NULL;
 
-bool deviceRecognized = false;
 long fifoOut[32][3];
-int  numEntriesFifo = 0;
 long runningAverage[3] = {0, 0, 0};
-long sumFifo[3];
 long fifoDelta[32][3];
 bool fifoFull = false;
 int  fifoCount = 0;
 int  numValsForAvg = 0;
-// static int id = 0;
 
-Adxl355 adxl355(CHIP_SELECT_PIN_ADXL);
-SPIClass *spi1 = NULL;
-double sr = 0;
+// --------------------------------------------------------------------------------------------
+// Variables to hold accelerometer data
+DynamicJsonDocument jsonDoc(4000);
+DynamicJsonDocument jsonTraces(4000);
+JsonArray traces = jsonTraces.to<JsonArray>();
+static char msg[2000];
+
+// 10 second FIFO queue for STA / LTA algorithm
+typedef struct AccelXYZ {
+  double x; double y; double z;
+} AccelReading ;
+cppQueue StaLtaQue( sizeof( AccelReading ), 352, FIFO );   // 11 seconds of Accelerometer data
+uint32_t numSecsOfAccelReadings = 0;
 
 // --------------------------------------------------------------------------------------------
 // SmartConfig
@@ -129,6 +142,9 @@ bool startSmartConfig();
 //   NEO_GRB     Pixels are wired for GRB bitstream (most NeoPixel products)
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 void NeoPixelStatus( int );
+void NeoPixelBreathe();
+bool breathedirection = true;
+int  breatheintensity = 1;
 
 // Map the OpenEEW LED status colors to the Particle Photon status colors
 #define LED_OFF           0
@@ -143,6 +159,15 @@ void NeoPixelStatus( int );
 #define LED_ERROR         9 // Red
 
 // --------------------------------------------------------------------------------------------
+// Buzzer Alarm
+void EarthquakeAlarm();
+void AlarmBuzzer();
+int freq = 4000;
+int channel = 0;
+int resolution = 8;
+int io = 5;
+
+// --------------------------------------------------------------------------------------------
 void IRAM_ATTR isr_adxl() {
   fifoFull = true;
   //fifoCount++;
@@ -154,7 +179,6 @@ void StartADXL355() {
   delay(1000);
 
   if (adxl355.isDeviceRecognized()) {
-    deviceRecognized = true;
     Serial.println("Initializing sensor");
     adxl355.initializeSensor(range, odr_lpf, debug);
     Serial.println("Calibrating sensor");
@@ -170,25 +194,42 @@ void StartADXL355() {
 
 // Handle subscribed MQTT topics - Alerts and Sample Rate changes
 void callback(char* topic, byte* payload, unsigned int length) {
+  StaticJsonDocument<100> jsonMQTTReceiveDoc;
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] : ");
 
   payload[length] = 0; // ensure valid content is zero terminated so can treat as c-string
   Serial.println((char *)payload);
-  DeserializationError err = deserializeJson(jsonReceiveDoc, (char *)payload);
+  DeserializationError err = deserializeJson(jsonMQTTReceiveDoc, (char *)payload);
   if (err) {
     Serial.print(F("deserializeJson() failed with code : "));
     Serial.println(err.c_str());
   } else {
-    JsonObject cmdData = jsonReceiveDoc.as<JsonObject>();
+    JsonObject cmdData = jsonMQTTReceiveDoc.as<JsonObject>();
     if ( strcmp(topic, MQTT_TOPIC_ALARM) == 0 ) {
       // Sound the Buzzer & Blink the LED
-      Serial.println("Earthquake Alarm!");
-      for( int i=0;i<4;i++){
-        delay(500);
-        NeoPixelStatus( LED_ERROR ); // Alarm - blink red
-      }
+      EarthquakeAlarm();
+    } else if ( strcmp(topic, MQTT_TOPIC_FWCHECK) == 0 ) {
+      // Remote message received to check for new firmware
+      // If a device is running for many months it might fall behind on the version of the
+      // firmware it is running. As part of the ESP32 power up / activation process,
+      // the board does a firmware version check. If there is a newer firmware version
+      // it initiates an OTA firmware update. That only happens on startup.
+      // A board that has been running for a long time might be stranded on an old version.
+      // The administrator/device owner has asked the board to check for a firmware update.
+      // That would let us dynamically update sensors if there was a security / software flaw.
+      NeoPixelStatus( LED_FIRMWARE_OTA ); // Firmware OTA - Magenta
+      OpenEEWDeviceActivation();
+    } else if ( strcmp(topic, MQTT_TOPIC_SEND10SEC) == 0 ) {
+      // Send 10 seconds of accelerometer history
+      Serial.println("Send 10 seconds of accelerometer history to the cloud");
+      Send10Seconds2Cloud() ;
+    } else if ( strcmp(topic, MQTT_TOPIC_SENDACCEL) == 0 ) {
+      // Start sending live accelometer data to the cloud. The payload asks for n seconds of data
+      numSecsOfAccelReadings = cmdData["LiveDataDuration"].as<uint32_t>();
+      Serial.print("Send live accelometer data to the cloud (secs):");
+      Serial.println( numSecsOfAccelReadings );
     } else if ( strcmp(topic, MQTT_TOPIC_SAMPLERATE) == 0 ) {
       // Set the ADXL355 Sample Rate
       int32_t NewSampleRate = 0;
@@ -200,19 +241,20 @@ void callback(char* topic, byte* payload, unsigned int length) {
         Adxl355SampleRate = 31;
         SampleRateChanged = true;
         odr_lpf = Adxl355::ODR_LPF::ODR_31_25_AND_7_813;
-        sr = 31.25;
       } else if ( NewSampleRate == 125 ) {
         // Requested sample rate of 125 is valid
         Adxl355SampleRate = 125;
         SampleRateChanged = true;
         odr_lpf = Adxl355::ODR_LPF::ODR_125_AND_31_25;
-        sr = 125.0;
       } else if ( NewSampleRate == 0 ) {
         // Turn off the sensor ADXL
         Adxl355SampleRate = 0;
         SampleRateChanged = false; // false so the code below doesn't restart it
         Serial.println("Stopping the ADXL355");
         adxl355.stop();
+        StaLtaQue.flush() ; // flush the Queue
+        strip.clear();  // Off
+        strip.show();
       } else {
         // invalid - leave the Sample Rate unchanged
       }
@@ -227,8 +269,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
         delay(1000);
         Serial.println("Restarting");
         StartADXL355();
+        breatheintensity = 1;
+        breathedirection = true;
       }
-      jsonReceiveDoc.clear();
+      jsonMQTTReceiveDoc.clear();
     } else {
       Serial.println("Unknown command received");
     }
@@ -236,7 +280,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
 }
 
 
-bool FirmwareVersionCheck( char *, String );
 bool FirmwareVersionCheck( char *firmware_latest, String firmware_ota_url ) {
   semver_t current_version = {};
   semver_t latest_version = {};
@@ -341,7 +384,6 @@ void GetGeoCoordinates( float *latitude, float *longitude) {
 
 
 // Call the OpenEEW Device Activation endpoint to retrieve MQTT OrgID
-bool OpenEEWDeviceActivation();
 bool OpenEEWDeviceActivation() {
   // OPENEEW_ACTIVATION_ENDPOINT "https://openeew-earthquakes.mybluemix.net/activation?ver=1"
   // $ curl -i  -X POST -d '{"macaddress":"112233445566","lat":40,"lng":-74,"firmware_device":"1.0.0"}'
@@ -428,6 +470,9 @@ void Connect2MQTTbroker() {
       Serial.println("MQTT Connected");
       mqtt.subscribe(MQTT_TOPIC_ALARM);
       mqtt.subscribe(MQTT_TOPIC_SAMPLERATE);
+      mqtt.subscribe(MQTT_TOPIC_FWCHECK);
+      mqtt.subscribe(MQTT_TOPIC_SEND10SEC);
+      mqtt.subscribe(MQTT_TOPIC_SENDACCEL);
       mqtt.setBufferSize(2000);
       mqtt.loop();
     } else {
@@ -435,6 +480,81 @@ void Connect2MQTTbroker() {
       delay(5000);
     }
   }
+}
+
+
+void Send10Seconds2Cloud() {
+  // DynamicJsonDocument is stored on the heap
+  // Allocate a ArduinoJson buffer large enough to 10 seconds of Accelerometer trace data
+  DynamicJsonDocument historydoc(16384);
+  JsonObject payload = historydoc.to<JsonObject>();
+  JsonObject status = payload.createNestedObject("d");
+  JsonArray  alltraces = status.createNestedArray("traces");
+
+  // Load the key/value pairs into the serialized ArduinoJSON format
+  status["device_id"] = deviceID ;
+
+  // Generate an array of json objects that contain x,y,z arrays of 32 floats.
+  // [{"x":[],"y":[],"z":[]},{"x":[],"y":[],"z":[]}]
+  JsonObject acceleration = alltraces.createNestedObject();
+
+  AccelReading AccelRecord ;
+  //char reading[75];
+  for( uint16_t idx=0; idx < StaLtaQue.getCount(); idx++ ) {
+    if( StaLtaQue.peekIdx( &AccelRecord, idx) ) {
+      //sprintf( reading, "[ x=%3.3f , y=%3.3f , z=%3.3f ]", AccelRecord.x, AccelRecord.y, AccelRecord.z);
+      //Serial.println(reading);
+
+      acceleration["x"].add(AccelRecord.x);
+      acceleration["y"].add(AccelRecord.y);
+      acceleration["z"].add(AccelRecord.z);
+    }
+
+  }
+
+  // Serialize the History Json object into a string to be transmitted
+  //serializeJson(historydoc,Serial);  // print to console
+  static char historymsg[16384];;
+  serializeJson(historydoc, historymsg, 16383);
+
+  int jsonSize = measureJson(historydoc);
+  Serial.print("Sending 10 seconds of accelerometer readings in a MQTT packet of size: ");
+  Serial.println( jsonSize );
+  mqtt.setBufferSize( (jsonSize + 50 ));  // increase the MQTT buffer size
+
+  // Publish the message to MQTT Broker
+  if (!mqtt.publish(MQTT_TOPIC, historymsg)) {
+    Serial.println("MQTT Publish failed");
+  } else {
+    NeoPixelStatus( LED_CONNECTED ); // Success - blink cyan
+  }
+
+  historydoc.clear();
+}
+
+
+void SendLiveData2Cloud() {
+  // variables to hold accelerometer data
+  // DynamicJsonDocument is stored on the heap
+  JsonObject payload = jsonDoc.to<JsonObject>();
+  JsonObject status = payload.createNestedObject("d");
+
+  // Load the key/value pairs into the serialized ArduinoJSON format
+  status["device_id"] = deviceID;
+  status["traces"] = traces;
+
+  // Serialize the entire string to be transmitted
+  serializeJson(jsonDoc, msg, 2000);
+  Serial.println(msg);
+
+  // Publish the message to MQTT Broker
+  if (!mqtt.publish(MQTT_TOPIC, msg)) {
+    Serial.println("MQTT Publish failed");
+  } else {
+    NeoPixelStatus( LED_CONNECTED ); // Success - blink cyan
+  }
+
+  jsonDoc.clear();
 }
 
 
@@ -493,9 +613,8 @@ void NetworkEvent(WiFiEvent_t event) {
       // Disconnect the MQTT session
       if( mqtt.connected() ){
         mqtt.disconnect();
-        // Handled at a lower level?
-        // mqtt.setClient(ETH); // Fails. wifiClient might still be valid
-        Connect2MQTTbroker();
+        // No need to call mqtt.setClient(ETH); because ETH is a ETHClient which is not the same class as WiFi client
+        // Connect2MQTTbroker(); // The MQTT reconnect will be handled by the main loop()
       }
       break;
     case SYSTEM_EVENT_ETH_DISCONNECTED:
@@ -534,7 +653,7 @@ void SetTimeESP32() {
   configTime(TZ_OFFSET * 3600, TZ_DST * 60, "pool.ntp.org", "0.pool.ntp.org");
   Serial.println("\nWaiting for time");
   while(time(nullptr) <= 100000) {
-    NeoPixelStatus( LED_LISTEN_WIFI ); // blink blue
+    NeoPixelStatus( LED_FIRMWARE_DFU ); // blink yellow
     Serial.print(".");
     delay(100);
   }
@@ -621,12 +740,10 @@ void setup() {
 
 #if OPENEEW_SAMPLE_RATE_125
   odr_lpf = Adxl355::ODR_LPF::ODR_125_AND_31_25;
-  sr = 125.0;
 #endif
 
 #if OPENEEW_SAMPLE_RATE_31_25
   odr_lpf = Adxl355::ODR_LPF::ODR_31_25_AND_7_813;
-  sr = 31.25;
 #endif
 
   pinMode(ADXL_INT_PIN, INPUT);
@@ -636,6 +753,11 @@ void setup() {
   spi1 = new SPIClass(HSPI);
   adxl355.initSPI(*spi1);
   StartADXL355();
+
+  ledcSetup(channel, freq, resolution);
+  ledcAttachPin(io, channel);
+  pinMode(io, OUTPUT);
+  digitalWrite(io, LOW); // turn off buzzer
 }
 
 
@@ -650,7 +772,9 @@ void loop() {
     adxstatus = adxl355.getStatus();
 
     if (adxstatus & Adxl355::STATUS_VALUES::FIFO_FULL) {
-      if (-1 != (numEntriesFifo = adxl355.readFifoEntries((long *)fifoOut))) {
+      int numEntriesFifo = adxl355.readFifoEntries( (long *)fifoOut ) ;
+      if ( numEntriesFifo != -1 ) {
+        long sumFifo[3];
         sumFifo[0] = 0;
         sumFifo[1] = 0;
         sumFifo[2] = 0;
@@ -674,54 +798,63 @@ void loop() {
 
         // [{"x":[9.479,0],"y":[0.128,-1.113],"z":[-0.185,123.321]},{"x":[9.479,0],"y":[0.128,-1.113],"z":[-0.185,123.321]}]
         double gal;
+        double x, y, z;
         for (int i = 0; i < numEntriesFifo; i++) {
+          AccelReading AccelRecord;
           gal = adxl355.valueToGals(fifoDelta[i][0]);
-          acceleration["x"].add(round(gal*1000)/1000);
+          x = round(gal*1000)/1000;
+          acceleration["x"].add(x);
+          AccelRecord.x = x;
 
           gal = adxl355.valueToGals(fifoDelta[i][1]);
-          acceleration["y"].add(round(gal*1000)/1000);
+          y = round(gal*1000)/1000;
+          acceleration["y"].add(y);
+          AccelRecord.y = y;
 
           gal = adxl355.valueToGals(fifoDelta[i][2]);
-          acceleration["z"].add(round(gal*1000)/1000);
+          z = round(gal*1000)/1000;
+          acceleration["z"].add(z);
+          AccelRecord.z = z;
+
+          StaLtaQue.push(&AccelRecord);
         }
-        //serializeJson(traces, Serial);
-        //Serial.println("");
-        fifoCount++;
 
-        if (fifoCount < MAX_FIFO_COUNT) {
-          // Collect two samples
-        } else {
-          // variables to hold accelerometer data
-          // DynamicJsonDocument is stored on the heap
-          JsonObject payload = jsonDoc.to<JsonObject>();
-          JsonObject status = payload.createNestedObject("d");
-
-          // Load the key/value pairs into the serialized ArduinoJSON format
-          status["device_id"] = deviceID;
-          // status["msgId"] = id;
-          status["traces"] = traces;
-
-          // Serialize the entire string to be transmitted
-          serializeJson(jsonDoc, msg, 2000);
-          Serial.println(msg);
-
-          // Publish the message to MQTT Broker
-          if (!mqtt.publish(MQTT_TOPIC, msg)) {
-            Serial.println("MQTT Publish failed");
-          } else {
-            NeoPixelStatus( LED_CONNECTED ); // Success - blink cyan
-          }
-
-          // Reset fifoCount and fifoMessage
-          fifoCount = 0;
-          // id++;
-          jsonDoc.clear();
-          jsonTraces.clear();
-          traces = jsonTraces.to<JsonArray>();
+        // Do some STA / LTA math here...
+        // ...
+        // Whoa - STA/LTA algorithm detected some anomalous shaking
+        bool bPossibleEarthQuake = false ;
+        if( bPossibleEarthQuake ) {
+          // Start sending 5 minutes of live accelerometer data
+          numSecsOfAccelReadings = 300 ;
+          // Send the previous 10 seconds of history to the cloud
+          Send10Seconds2Cloud();
         }
+        char mathmsg[65];
+        sprintf(mathmsg, "%d accelerometer readings on the StaLta Queue", StaLtaQue.getCount());
+        Serial.println(mathmsg);
+        // When the math is done, drop 32 records off the queue
+        if( StaLtaQue.isFull() ) {
+          for( int i=0; i < 32; i++ )
+            StaLtaQue.drop();
+        }
+
+        if( numSecsOfAccelReadings > 0 ) {
+          SendLiveData2Cloud();
+          numSecsOfAccelReadings-- ;
+        }
+        // Clear & Reset JsonArrays
+        jsonTraces.clear();
+        traces = jsonTraces.to<JsonArray>();
+        
+        //Switch the direction of the LEDs
+        breathedirection = breathedirection ? false : true;       
       }
     }
   }
+  if( adxstatus )
+    NeoPixelBreathe();
+  
+  delay(10);
 }
 
 
@@ -947,7 +1080,7 @@ void NeoPixelStatus( int status ) {
       Serial.println("LED_FIRMWARE_DFU - Yellow");
       break;
     case LED_ERROR :
-      strip.fill( strip.Color(0,255,0), 0, 3);  // Red
+      strip.fill( strip.Color(255,0,0), 0, 3);  // Red
       Serial.println("LED_ERROR - Red");
       break;
     default :
@@ -955,4 +1088,42 @@ void NeoPixelStatus( int status ) {
       break;
   }
   strip.show(); // Send the updated pixel color to the hardware
+}
+
+
+void NeoPixelBreathe() {
+  if( breatheintensity < 0) 
+    breatheintensity = 0;
+  strip.setBrightness( breatheintensity );  // slow breathe the LED
+  // Serial.printf("Brightness is %d\n",breatheintensity);
+  strip.fill( strip.Color(0,255,255), 0, 3);
+  strip.show();
+
+  // Increase or decrease the LED intensity
+  breathedirection ? breatheintensity++ : breatheintensity-- ;
+}
+
+
+// Sound the Buzzer & Blink the LED
+void EarthquakeAlarm() {
+  Serial.println("Earthquake Alarm!");
+  for( int i=0;i<10;i++) {
+    delay(500);
+    NeoPixelStatus( LED_ERROR ); // Alarm - blink red
+    AlarmBuzzer();
+  }
+  digitalWrite(io, LOW); // turn off buzzer
+}
+
+
+// Generate Buzzer sounds
+void AlarmBuzzer() {
+  ledcWrite(channel, 50);
+  delay(100);
+  ledcWrite(channel, 500);
+  delay(100);
+  ledcWrite(channel, 2000);
+  delay(100);
+  ledcWrite(channel, 4000);
+  delay(100);
 }
