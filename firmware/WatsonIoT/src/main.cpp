@@ -103,11 +103,11 @@ Adxl355 adxl355(CHIP_SELECT_PIN_ADXL);
 SPIClass *spi1 = NULL;
 
 long fifoOut[32][3];
-long runningAverage[3] = {0, 0, 0};
-long fifoDelta[32][3];
 bool fifoFull = false;
 int  fifoCount = 0;
-int  numValsForAvg = 0;
+int STA_len = 32;    // can change to 125
+int LTA_len = 320;   // can change to 1250
+int QUE_len = LTA_len + STA_len; 
 
 // --------------------------------------------------------------------------------------------
 // Variables to hold accelerometer data
@@ -760,6 +760,20 @@ void setup() {
   digitalWrite(io, LOW); // turn off buzzer
 }
 
+bool  bPossibleEarthQuake      = false;
+double  thresh          = 3.0;
+double    stalta[3]     = { 0, 0, 0 };
+double    sample[3]     = { 0, 0, 0 };
+double    sampleSUM[3]  = { 0, 0, 0 };
+double        ltSUM[3]  = { 0, 0, 0 };
+double    sample1[3]    = { 0, 0, 0 };    
+double LTAsample1[3]    = { 0, 0, 0 };      
+double     offset[3]    = { 0, 0, 0 };
+double  sampleABS[3]    = { 0, 0, 0 };
+double sample1ABS       = 0;
+double LTAsample1ABS    = 0;
+double       stav[3]    = { 0, 0, 0 };
+double       ltav[3]    = { 0, 0, 0 };
 
 void loop() {
   mqtt.loop();
@@ -774,23 +788,7 @@ void loop() {
     if (adxstatus & Adxl355::STATUS_VALUES::FIFO_FULL) {
       int numEntriesFifo = adxl355.readFifoEntries( (long *)fifoOut ) ;
       if ( numEntriesFifo != -1 ) {
-        long sumFifo[3];
-        sumFifo[0] = 0;
-        sumFifo[1] = 0;
-        sumFifo[2] = 0;
 
-        for (int i = 0; i < 32; i++) {
-          for (int j = 0; j < 3; j++) {
-            fifoDelta[i][j] = fifoOut[i][j] - runningAverage[j];
-            sumFifo[j] += fifoOut[i][j];
-          }
-        }
-
-        for (int j = 0; j < 3; j++) {
-          runningAverage[j] = (numValsForAvg * runningAverage[j] + sumFifo[j]) / (numValsForAvg + 32);
-        }
-
-        numValsForAvg = min(numValsForAvg + 32, 2000);
 
         // Generate an array of json objects that contain x,y,z arrays of 32 floats.
         // [{"x":[],"y":[],"z":[]},{"x":[],"y":[],"z":[]}]
@@ -801,17 +799,17 @@ void loop() {
         double x, y, z;
         for (int i = 0; i < numEntriesFifo; i++) {
           AccelReading AccelRecord;
-          gal = adxl355.valueToGals(fifoDelta[i][0]);
+          gal = adxl355.valueToGals(fifoOut[i][0]);
           x = round(gal*1000)/1000;
           acceleration["x"].add(x);
           AccelRecord.x = x;
 
-          gal = adxl355.valueToGals(fifoDelta[i][1]);
+          gal = adxl355.valueToGals(fifoOut[i][1]);
           y = round(gal*1000)/1000;
           acceleration["y"].add(y);
           AccelRecord.y = y;
 
-          gal = adxl355.valueToGals(fifoDelta[i][2]);
+          gal = adxl355.valueToGals(fifoOut[i][2]);
           z = round(gal*1000)/1000;
           acceleration["z"].add(z);
           AccelRecord.z = z;
@@ -821,9 +819,118 @@ void loop() {
 
         // Do some STA / LTA math here...
         // ...
-        // Whoa - STA/LTA algorithm detected some anomalous shaking
-        bool bPossibleEarthQuake = false ;
+        if( StaLtaQue.isFull() ) {
+          //// find offset
+          int queCount = StaLtaQue.getCount( );
+          // But why are the first two z samples bad ?
+          // Start from 2 to compensate
+          for (int idx = 2; idx < queCount; idx++) {
+            AccelReading AccelRecord;
+            if( StaLtaQue.peekIdx( &AccelRecord, idx) ) {
+              sample[0] = AccelRecord.x;
+              sample[1] = AccelRecord.y;
+              sample[2] = AccelRecord.z;
+              // But why are the first two z samples bad ?
+              // Serial.printf(".sample[2] = %f ", sample[2]);
+              for (int j = 0; j < 3; j++) {
+                sampleSUM[j] += sample[j];            
+              }  
+            }
+          }
+          // Serial.printf(".offset = ");
+          for (int j = 0; j < 3; j++) {
+            offset[j]  = sampleSUM[j] / (QUE_len-2);    
+            // Serial.printf( " %f ", offset[j]);  
+          }
+          // Serial.printf("\n");
+            
+          //// find lta
+          sampleSUM[0] = 0;
+          sampleSUM[1] = 0;
+          sampleSUM[2] = 0;
+          for (int idx = 2; idx < LTA_len; idx++) {
+            AccelReading AccelRecord;
+            if( StaLtaQue.peekIdx( &AccelRecord, idx) ) {
+              sampleABS[0] = abs( AccelRecord.x - offset[0] );
+              sampleABS[1] = abs( AccelRecord.y - offset[1] );
+              sampleABS[2] = abs( AccelRecord.z - offset[2] );
+              for (int j = 0; j < 3; j++) {
+                sampleSUM[j] += sampleABS[j];            
+              }
+            }
+          }
+          // Serial.printf(".sum32abs = ");
+          for (int j = 0; j < 3; j++) {
+            ltav[j]  = sampleSUM[j] / (LTA_len-2); 
+            // Serial.printf( " %f ", sampleSUM[j]);      
+          }
+
+          //// find sta
+          sampleSUM[0] = 0;
+          sampleSUM[1] = 0;
+          sampleSUM[2] = 0;
+          for (int idx = LTA_len-STA_len ; idx < LTA_len; idx++) {
+            AccelReading AccelRecord;
+            if( StaLtaQue.peekIdx( &AccelRecord, idx) ) {
+              sampleABS[0] = abs( AccelRecord.x - offset[0] );
+              sampleABS[1] = abs( AccelRecord.y - offset[1] );
+              sampleABS[2] = abs( AccelRecord.z - offset[2] );
+              for (int j = 0; j < 3; j++) {
+                sampleSUM[j] += sampleABS[j];            
+              }
+            }
+          }
+          for (int j = 0; j < 3; j++) {
+            stav[j]    = sampleSUM[j] / STA_len;  
+            stalta[j]  =      stav[j] / ltav[j];
+            if ( bPossibleEarthQuake==false ) { 
+              if ( stalta[j] >= thresh ) {
+                // Whoa - STA/LTA algorithm detected some anomalous shaking
+                Serial.printf("%f = %f / %f (%i) s0\n", stalta[j], stav[j], ltav[j], j );
+              }
+            }     
+          } 
+
+          //// find sta / lta for the other 31 samples but without doing the summing again        
+
+          for (int idx = LTA_len+1; idx < QUE_len; idx++) {
+            AccelReading AccelRecord;
+            if( StaLtaQue.peekIdx( &AccelRecord, idx) ) {
+              sample[0] = AccelRecord.x;
+              sample[1] = AccelRecord.y;
+              sample[2] = AccelRecord.z;
+            }
+            if( StaLtaQue.peekIdx( &AccelRecord, idx-STA_len) ) {
+              sample1[0] = AccelRecord.x;
+              sample1[1] = AccelRecord.y;
+              sample1[2] = AccelRecord.z;
+            }
+            if( StaLtaQue.peekIdx( &AccelRecord, idx-LTA_len) ) {
+              LTAsample1[0] = AccelRecord.x;
+              LTAsample1[1] = AccelRecord.y;
+              LTAsample1[2] = AccelRecord.z;            
+            }
+            for (int j = 0; j < 3; j++) {
+              sampleABS[j]  = abs(sample[j]     - offset[j]);
+              sample1ABS    = abs(sample1[j]    - offset[j]);
+              LTAsample1ABS = abs(LTAsample1[j] - offset[j]);
+              stav[j]   += ( sampleABS[j] - sample1ABS)    /  STA_len;
+              ltav[j]   += ( sampleABS[j] - LTAsample1ABS) /  LTA_len;
+              stalta[j]  = stav[j] / ltav[j];
+              if ( bPossibleEarthQuake==false ) { 
+                if ( stalta[j] >= thresh ) {
+                  // Whoa - STA/LTA algorithm detected some anomalous shaking
+                  Serial.printf("%f = %f / %f (%i)\n", stalta[j], stav[j], ltav[j], j );
+                  bPossibleEarthQuake = true ;
+                }
+              }
+            }  
+          }
+        } 
+
+        // If STA/LTA algorithm detected some anomalous shaking
         if( bPossibleEarthQuake ) {
+          bPossibleEarthQuake=false;
           // Start sending 5 minutes of live accelerometer data
           numSecsOfAccelReadings = 300 ;
           // Send the previous 10 seconds of history to the cloud
@@ -851,6 +958,7 @@ void loop() {
       }
     }
   }
+
   if( adxstatus )
     NeoPixelBreathe();
 
