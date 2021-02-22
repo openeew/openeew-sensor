@@ -24,7 +24,11 @@
 static char MQTT_HOST[48];            // ORGID.messaging.internetofthings.ibmcloud.com
 static char MQTT_DEVICEID[30];        // Allocate a buffer large enough for "d:orgid:devicetype:deviceid"
 static char MQTT_ORGID[7];            // Watson IoT 6 character orgid
+#ifdef LOCALNET
+#define MQTT_PORT        1883         // Secure MQTT 8883 / Insecure MQTT 1883
+#else
 #define MQTT_PORT        8883         // Secure MQTT 8883 / Insecure MQTT 1883
+#endif
 #define MQTT_TOKEN       "OpenEEW-sens0r"   // Watson IoT DeviceId authentication token
 #define MQTT_DEVICETYPE  "OpenEEW"    // Watson IoT DeviceType
 #define MQTT_USER        "use-token-auth"
@@ -46,7 +50,11 @@ char deviceID[13];
 
 // MQTT objects
 void callback(char* topic, byte* payload, unsigned int length);
-WiFiClientSecure wifiClient;
+#ifdef LOCALNET
+WiFiClient	 wifiClient;    // Insecure MQTT
+#else
+WiFiClientSecure wifiClient;    // Secure MQTT
+#endif
 PubSubClient mqtt(MQTT_HOST, MQTT_PORT, callback, wifiClient);
 
 // Activation
@@ -729,7 +737,11 @@ void setup() {
   sprintf(MQTT_DEVICEID,"d:%s:%s:%02X%02X%02X%02X%02X%02X",MQTT_ORGID,MQTT_DEVICETYPE,mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
   Serial.println(MQTT_DEVICEID);
 
-  sprintf(MQTT_HOST,"%s.messaging.internetofthings.ibmcloud.com",MQTT_ORGID);
+#ifdef LOCALNET
+  sprintf(MQTT_HOST,"192.168.1.101");  // Enter the IP address of the MQTT broker on your local subnet
+#else
+  sprintf(MQTT_HOST,"%s.messaging.internetofthings.ibmcloud.com",MQTT_ORGID);  // Centrally managed
+#endif
 
   char mqttparams[100]; // Allocate a buffer large enough for this string ~95 chars
   sprintf(mqttparams, "MQTT_USER:%s  MQTT_TOKEN:%s  MQTT_DEVICEID:%s", MQTT_USER, MQTT_TOKEN, MQTT_DEVICEID);
