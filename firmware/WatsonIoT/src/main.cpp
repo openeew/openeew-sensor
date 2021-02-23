@@ -115,7 +115,7 @@ bool fifoFull = false;
 int  fifoCount = 0;
 int STA_len = 32;    // can change to 125
 int LTA_len = 320;   // can change to 1250
-int QUE_len = LTA_len + STA_len; 
+int QUE_len = LTA_len + STA_len;
 
 // --------------------------------------------------------------------------------------------
 // Variables to hold accelerometer data
@@ -658,7 +658,7 @@ void NetworkEvent(WiFiEvent_t event) {
 // MQTT SSL requires a relatively accurate time between broker and client
 void SetTimeESP32() {
   // Set time from NTP servers
-  configTime(TZ_OFFSET * 3600, TZ_DST * 60, "pool.ntp.org", "0.pool.ntp.org");
+  configTime(TZ_OFFSET * 3600, TZ_DST * 60, "time.nist.gov", "pool.ntp.org");
   Serial.println("\nWaiting for time");
   while(time(nullptr) <= 100000) {
     NeoPixelStatus( LED_FIRMWARE_DFU ); // blink yellow
@@ -778,8 +778,8 @@ double    stalta[3]     = { 0, 0, 0 };
 double    sample[3]     = { 0, 0, 0 };
 double    sampleSUM[3]  = { 0, 0, 0 };
 double        ltSUM[3]  = { 0, 0, 0 };
-double    sample1[3]    = { 0, 0, 0 };    
-double LTAsample1[3]    = { 0, 0, 0 };      
+double    sample1[3]    = { 0, 0, 0 };
+double LTAsample1[3]    = { 0, 0, 0 };
 double     offset[3]    = { 0, 0, 0 };
 double  sampleABS[3]    = { 0, 0, 0 };
 double sample1ABS       = 0;
@@ -845,17 +845,17 @@ void loop() {
               // But why are the first two z samples bad ?
               // Serial.printf(".sample[2] = %f ", sample[2]);
               for (int j = 0; j < 3; j++) {
-                sampleSUM[j] += sample[j];            
-              }  
+                sampleSUM[j] += sample[j];
+              }
             }
           }
           // Serial.printf(".offset = ");
           for (int j = 0; j < 3; j++) {
-            offset[j]  = sampleSUM[j] / (QUE_len-2);    
-            // Serial.printf( " %f ", offset[j]);  
+            offset[j]  = sampleSUM[j] / (QUE_len-2);
+            // Serial.printf( " %f ", offset[j]);
           }
           // Serial.printf("\n");
-            
+
           //// find lta
           sampleSUM[0] = 0;
           sampleSUM[1] = 0;
@@ -867,14 +867,14 @@ void loop() {
               sampleABS[1] = abs( AccelRecord.y - offset[1] );
               sampleABS[2] = abs( AccelRecord.z - offset[2] );
               for (int j = 0; j < 3; j++) {
-                sampleSUM[j] += sampleABS[j];            
+                sampleSUM[j] += sampleABS[j];
               }
             }
           }
           // Serial.printf(".sum32abs = ");
           for (int j = 0; j < 3; j++) {
-            ltav[j]  = sampleSUM[j] / (LTA_len-2); 
-            // Serial.printf( " %f ", sampleSUM[j]);      
+            ltav[j]  = sampleSUM[j] / (LTA_len-2);
+            // Serial.printf( " %f ", sampleSUM[j]);
           }
 
           //// find sta
@@ -888,22 +888,22 @@ void loop() {
               sampleABS[1] = abs( AccelRecord.y - offset[1] );
               sampleABS[2] = abs( AccelRecord.z - offset[2] );
               for (int j = 0; j < 3; j++) {
-                sampleSUM[j] += sampleABS[j];            
+                sampleSUM[j] += sampleABS[j];
               }
             }
           }
           for (int j = 0; j < 3; j++) {
-            stav[j]    = sampleSUM[j] / STA_len;  
+            stav[j]    = sampleSUM[j] / STA_len;
             stalta[j]  =      stav[j] / ltav[j];
-            if ( bPossibleEarthQuake==false ) { 
+            if ( bPossibleEarthQuake==false ) {
               if ( stalta[j] >= thresh ) {
                 // Whoa - STA/LTA algorithm detected some anomalous shaking
                 Serial.printf("%f = %f / %f (%i) s0\n", stalta[j], stav[j], ltav[j], j );
               }
-            }     
-          } 
+            }
+          }
 
-          //// find sta / lta for the other 31 samples but without doing the summing again        
+          //// find sta / lta for the other 31 samples but without doing the summing again
 
           for (int idx = LTA_len+1; idx < QUE_len; idx++) {
             AccelReading AccelRecord;
@@ -920,7 +920,7 @@ void loop() {
             if( StaLtaQue.peekIdx( &AccelRecord, idx-LTA_len) ) {
               LTAsample1[0] = AccelRecord.x;
               LTAsample1[1] = AccelRecord.y;
-              LTAsample1[2] = AccelRecord.z;            
+              LTAsample1[2] = AccelRecord.z;
             }
             for (int j = 0; j < 3; j++) {
               sampleABS[j]  = abs(sample[j]     - offset[j]);
@@ -929,16 +929,16 @@ void loop() {
               stav[j]   += ( sampleABS[j] - sample1ABS)    /  STA_len;
               ltav[j]   += ( sampleABS[j] - LTAsample1ABS) /  LTA_len;
               stalta[j]  = stav[j] / ltav[j];
-              if ( bPossibleEarthQuake==false ) { 
+              if ( bPossibleEarthQuake==false ) {
                 if ( stalta[j] >= thresh ) {
                   // Whoa - STA/LTA algorithm detected some anomalous shaking
                   Serial.printf("%f = %f / %f (%i)\n", stalta[j], stav[j], ltav[j], j );
                   bPossibleEarthQuake = true ;
                 }
               }
-            }  
+            }
           }
-        } 
+        }
 
         // If STA/LTA algorithm detected some anomalous shaking
         if( bPossibleEarthQuake ) {
@@ -1212,7 +1212,7 @@ void NeoPixelStatus( int status ) {
 
 
 void NeoPixelBreathe() {
-  if( breatheintensity < 0) 
+  if( breatheintensity < 0)
     breatheintensity = 0;
   strip.setBrightness( breatheintensity );  // slow breathe the LED
   // Serial.printf("Brightness is %d\n",breatheintensity);
