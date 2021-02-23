@@ -23,6 +23,3 @@
 #define RECONNECTION_TO 10000 //ms
 
 #define PRODUCTION_BOARD 1
-
-// Run this firmware with a MQTT Broker on a local subnet
-//#define LOCALNET

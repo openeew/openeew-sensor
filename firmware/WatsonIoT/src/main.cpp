@@ -20,11 +20,15 @@
 #define OPENEEW_ACTIVATION_ENDPOINT "https://openeew-devicemgmt.mybluemix.net/activation?ver=1"
 #define OPENEEW_FIRMWARE_VERSION    "1.4.0"
 
+// Run this firmware with a MQTT Broker on a local subnet
+// Comment this Define to send data to the Cloud
+#define MQTT_LOCALBROKER "192.168.1.101"
+
 // Watson IoT connection details
 static char MQTT_HOST[48];            // ORGID.messaging.internetofthings.ibmcloud.com
 static char MQTT_DEVICEID[30];        // Allocate a buffer large enough for "d:orgid:devicetype:deviceid"
 static char MQTT_ORGID[7];            // Watson IoT 6 character orgid
-#ifdef LOCALNET
+#ifdef MQTT_LOCALBROKER
 #define MQTT_PORT        1883         // Secure MQTT 8883 / Insecure MQTT 1883
 #else
 #define MQTT_PORT        8883         // Secure MQTT 8883 / Insecure MQTT 1883
@@ -50,7 +54,7 @@ char deviceID[13];
 
 // MQTT objects
 void callback(char* topic, byte* payload, unsigned int length);
-#ifdef LOCALNET
+#ifdef MQTT_LOCALBROKER
 WiFiClient	 wifiClient;    // Insecure MQTT
 #else
 WiFiClientSecure wifiClient;    // Secure MQTT
@@ -737,8 +741,8 @@ void setup() {
   sprintf(MQTT_DEVICEID,"d:%s:%s:%02X%02X%02X%02X%02X%02X",MQTT_ORGID,MQTT_DEVICETYPE,mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
   Serial.println(MQTT_DEVICEID);
 
-#ifdef LOCALNET
-  sprintf(MQTT_HOST,"192.168.1.101");  // Enter the IP address of the MQTT broker on your local subnet
+#ifdef MQTT_LOCALBROKER
+  sprintf(MQTT_HOST,MQTT_LOCALBROKER);  // Enter the IP address of the MQTT broker on your local subnet
 #else
   sprintf(MQTT_HOST,"%s.messaging.internetofthings.ibmcloud.com",MQTT_ORGID);  // Centrally managed
 #endif
