@@ -62,9 +62,14 @@ IoT security is critical when running large distributed networks of IoT sensors.
 - `-P` : The Password token can be generated on the Watson IoT web console. Special characters in the password need to be escaped with a slash on the mosquitto_sub CLI.  If the generated password is `PZD*V!GFA5cEDHQrc)`, you want to specify `PZD*V\!GFA5cEDHQrc\)`
 - `-i` : must adhere to a specific format. It needs to be in the format of `a:<orgid>:anystring`. "a:" declares this as an application, followed by the 6 character Watson IoT OrgID, followed by a unique string of your choosing. For example `a:xyz123:walicki`
 - If you want to use mosquitto_sub to watch the data, the WIoTP connection security needs to be TLS Optional. The port needs to be 1883. The device can be sending its data via TLS with Token Auth 8883 to the cloud.
+- Better would be to turn off TLS Optional, use port 8883 and pass the Watson IoT messaging root certificate pem file.
 
 ```sh
 mosquitto_sub -t "iot-2/type/OpenEEW/id/+/evt/+/fmt/+" -h k55sah.messaging.internetofthings.ibmcloud.com -p 1883  -u "a-k55sah-i0a6h9p8ea" -P PZD*V\!GFA5cEDHQrc\) -i "a:k55sah:mosquitto"
+```
+
+```sh
+mosquitto_sub -t "iot-2/type/OpenEEW/id/+/evt/+/fmt/+" -h k55sah.messaging.internetofthings.ibmcloud.com -p 8883 --cafile messaging.pem  -u "a-k55sah-i0a6h9p8ea" -P PZD*V\!GFA5cEDHQrc\) -i "a:k55sah:mosquitto"
 ```
 
 Now that we've demonstrated the `mosquitto_sub` syntax, I'll move the API Key and Token into environment variables so as to not confuse subsequent examples. That will make readability and your copy/paste easier.  Just set the two env vars and specify your Org ID.
@@ -72,13 +77,12 @@ Now that we've demonstrated the `mosquitto_sub` syntax, I'll move the API Key an
 ```sh
 export WIOTP_APIKEY=a-OrgID-10digits
 export WIOTP_TOKEN=<token>
-mosquitto_sub -t iot-2/type/+/id/+/evt/+/fmt/+ -h OrgId.messaging.internetofthings.ibmcloud.com -p 1883 -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i a:OrgId:mosquitto
+mosquitto_sub -t iot-2/type/+/id/+/evt/+/fmt/+ -h OrgId.messaging.internetofthings.ibmcloud.com -p 8883 --cafile messaging.pem -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i a:OrgId:mosquitto
 ```
 
-#### Other MQTT Tricks
+#### Subscribe to all OpenEEW commands sent to your OpenEEW device
 
-Sometimes it is useful to subscribe to and watch all the commands crossing across your
-MQTT topic space.
+Sometimes it is useful to subscribe to and watch all the commands crossing across your MQTT topic space.
 
 ##### Local
 
@@ -89,7 +93,7 @@ mosquitto_sub -t "iot-2/cmd/+/fmt/json" -h localhost -p 1883 -i "a:listen:comman
 ##### Watson IoT Platform
 
 ```sh
-mosquitto_sub -t iot-2/type/+/id/+/cmd/+/fmt/json -h OrgId.messaging.internetofthings.ibmcloud.com -p 1883 -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i a:OrgId:mosquitto
+mosquitto_sub -t iot-2/type/+/id/+/cmd/+/fmt/json -h OrgId.messaging.internetofthings.ibmcloud.com -p 8883 --cafile messaging.pem -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i a:OrgId:mosquitto
 ```
 
 ##### Notes
@@ -127,7 +131,7 @@ mosquitto_pub -h 192.168.1.101 -t iot-2/cmd/earthquake/fmt/json -i cmd:earthquak
 #### Watson IoT Platform
 
 ```sh
-mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 1883 -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/earthquake/fmt/json  -m {Alarm:true}
+mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 8883 --cafile messaging.pem -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/earthquake/fmt/json  -m {Alarm:true}
 ```
 
 ### SENDACCEL
@@ -156,13 +160,13 @@ mosquitto_pub -h 192.168.1.101 -t iot-2/cmd/sendacceldata/fmt/json -i cmd:sendac
 #### Watson IoT Platform
 
 ```sh
-mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 1883 -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/sendacceldata/fmt/json  -m {LiveDataDuration:1}
+mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 8883 --cafile messaging.pem -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/sendacceldata/fmt/json  -m {LiveDataDuration:1}
 
-mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 1883 -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/sendacceldata/fmt/json  -m {LiveDataDuration:30}
+mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 8883 --cafile messaging.pem -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/sendacceldata/fmt/json  -m {LiveDataDuration:30}
 
-mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 1883 -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/sendacceldata/fmt/json  -m {LiveDataDuration:4294967295}
+mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 8883 --cafile messaging.pem -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/sendacceldata/fmt/json  -m {LiveDataDuration:4294967295}
 
-mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 1883 -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/sendacceldata/fmt/json  -m {LiveDataDuration:0}
+mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 8883 --cafile messaging.pem -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/sendacceldata/fmt/json  -m {LiveDataDuration:0}
 ```
 
 ### SAMPLERATE
@@ -174,7 +178,7 @@ Use this MQTT topic to change the ADXL355 sampling rate.
  ```sh
  mosquitto_pub -h 192.168.1.101 -t iot-2/cmd/samplerate/fmt/json -m {SampleRate:0} -i cmd:samplerate
 
- mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 1883 -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/samplerate/fmt/json  -m {SampleRate:0}
+ mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 8883 --cafile messaging.pem -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/samplerate/fmt/json  -m {SampleRate:0}
 ```
 
 - Standard 31 samples per second
@@ -182,7 +186,7 @@ Use this MQTT topic to change the ADXL355 sampling rate.
 ```sh
  mosquitto_pub -h 192.168.1.101 -t iot-2/cmd/samplerate/fmt/json -m {SampleRate:31} -i cmd:samplerate
 
- mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 1883 -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/samplerate/fmt/json  -m {SampleRate:31}
+ mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 8883 --cafile messaging.pem -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/samplerate/fmt/json  -m {SampleRate:31}
  ```
 
 - 125 samples per second (a firehose that eats bandwidth)
@@ -190,7 +194,7 @@ Use this MQTT topic to change the ADXL355 sampling rate.
  ```sh
  mosquitto_pub -h 192.168.1.101 -t iot-2/cmd/samplerate/fmt/json -m {SampleRate:125} -i cmd:samplerate
 
- mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 1883 -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/samplerate/fmt/json  -m {SampleRate:125}
+ mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 8883 --cafile messaging.pem -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/samplerate/fmt/json  -m {SampleRate:125}
  ```
 
 ### FWCHECK
@@ -207,7 +211,7 @@ The board will blink magenta while it checks if newer firmware is available. If 
 ```sh
 mosquitto_pub -h 192.168.1.101 -t iot-2/cmd/firmwarecheck/fmt/json -m {} -i cmd:firmware
 
-mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 1883 -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/firmwarecheck/fmt/json  -m {}
+mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 8883 --cafile messaging.pem -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/firmwarecheck/fmt/json  -m {}
 ```
 
 ### SEND10SEC
@@ -217,16 +221,17 @@ Use this MQTT topic to send 10 seconds of accelerometer history to the cloud.  I
 ```sh
 mosquitto_pub -h 192.168.1.101 -t iot-2/cmd/10secondhistory/fmt/json -m {} -i cmd:send10sec
 
-mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 1883 -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/10secondhistory/fmt/json  -m {}
+mosquitto_pub -h OrgID.messaging.internetofthings.ibmcloud.com -p 8883 --cafile messaging.pem -u $WIOTP_APIKEY -P $WIOTP_TOKEN -i "a:OrgID:mosquitto" -t iot-2/type/OpenEEW/id/A8032A4DD5F0/cmd/10secondhistory/fmt/json  -m {}
 ```
 
 ### Python Examples
 
 This repository also contains Python examples that can be modified to do the above. `tbd`
+Learn more about the [IBM Watson IoT Platform Python SDK](https://ibm-watson-iot.github.io/iot-python/)
 
 ### Node Examples
 
-This repository also contains Python examples that can be modified to do the above. `tbd`
+This repository also contains Node examples that can be modified to do the above. `tbd`
 
 ### Author
 
