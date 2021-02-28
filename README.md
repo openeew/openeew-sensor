@@ -26,9 +26,9 @@ Please note the following pins:
 
 You can [3d print yourself a sturdy wall mounted enclosure](/enclosure/) for your PCB using the 3d files. This design features snap lip joints to make it easy to assemble, and flanged base for a sturdy connection to the wall surface. Here you can find a variant that includes a housing for a small [bubble level](https://www.aliexpress.com/item/33023021109.html?spm=a2g0o.productlist.0.0.40315dfczmp3OU&algo_pvid=bdb50c5f-6bba-4c9a-ac95-6905622008cf&algo_expid=bdb50c5f-6bba-4c9a-ac95-6905622008cf-27&btsid=0ab6fb8315990954564341733e9ba2&ws_ab_test=searchweb0_0,searchweb201602_,searchweb201603_) that will help with installation.
 
-![3d printed case v1.0](/images/sensor-bubble-level.jpg)
+![3d printed case v1.0](/images/openeew-node-withlid)
 
-![3d printed case v1.0](/images/sensor-case-open.jpg)
+![3d printed case v1.0](/images/openeew-node-blue.jpg)
 
 ![3d printed case v1.0](/images/animated-box.gif)
 
