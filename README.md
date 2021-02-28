@@ -15,7 +15,7 @@ You can find the schematics, PCB, and BOM files in [here](/pcb). The board was g
 
 The assembled sensor, enclosure, and power supply, can also be bought directly [here](https://grillo.io/buy-sensor/).
 
-![PCB](images/pcb-openeew.PNG)
+![PCB](images/openeew-node-board.jpg)
 
 Please note the following pins:
 - ADXL355 > SPI (HSPI) > CS GPIO 15
