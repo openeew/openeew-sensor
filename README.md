@@ -40,12 +40,14 @@ Alternatively you can buy a case that fits the board dimensions ([such as this](
 
 For more details please review the [firmware instructions](https://github.com/openeew/openeew-sensor/blob/master/firmware/README.md).
 
+Learn more about using [MQTT to communicate with the firmware](FIRMWARE.md) 
 
+### Contributors
 
-## Authors
-
-- **Grillo** - _Initial work_ - [Grillo](https://grillo.io)
-- John Walicki - Watson IoT - [John Walicki](http://github.com/johnwalicki)
+<a href="https://github.com/openeew/openeew-sensor/graphs/contributors">
+  <img src="https://contributors-img.web.app/image?repo=openeew/openeew-sensor" />
+</a>
+___
 
 Enjoy! Give us [feedback](https://github.com/openeew/openeew-sensor/issues) if you have suggestions on how to improve this information.
 
