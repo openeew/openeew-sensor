@@ -9,6 +9,7 @@
 #include <Adxl355.h>  // forked from https://github.com/markrad/esp32-ADXL355
 #include <math.h>
 #include <esp_https_ota.h>
+#include <esp_task_wdt.h>
 #include <SPIFFS.h>
 #include "config.h"
 #include "semver.h"  // from https://github.com/h2non/semver.c
@@ -45,9 +46,10 @@ static char MQTT_ORGID[7];            // Watson IoT 6 character orgid
 #define MQTT_TOPIC_SENDACCEL  "iot-2/cmd/sendacceldata/fmt/json"
 char deviceID[13];
 
-// Store the .mybluemix.net Server PEM and Digicert CA and Root CA in SPIFFS
+// Store the Download Server PEM and Digicert CA and Root CA in SPIFFS
 // If an OTA firmware upgrade is required, the binary is downloaded from a secure server
-#define MYBLUEMIX_PEM_FILE "/mybluemix-net-chain.pem"
+#define DOWNLOAD_CERT_PEM_FILE "/mybluemix-net-chain.pem"
+//#define DOWNLOAD_CERT_PEM_FILE "/github-com-chain.pem"
 
 // Timezone info
 #define TZ_OFFSET -5  // (EST) Hours timezone offset to GMT (without daylight saving time)
@@ -327,32 +329,38 @@ bool FirmwareVersionCheck( char *firmware_latest, String firmware_ota_url ) {
     NeoPixelStatus( LED_FIRMWARE_OTA ); // blink magenta
 
     if( SPIFFS.begin(true) ) {
-      Serial.printf("Opening Server PEM Chain : %s\r\n", MYBLUEMIX_PEM_FILE);
-      File pemfile = SPIFFS.open( MYBLUEMIX_PEM_FILE );
+      Serial.printf("Opening Server PEM Chain : %s\r\n", DOWNLOAD_CERT_PEM_FILE);
+      File pemfile = SPIFFS.open( DOWNLOAD_CERT_PEM_FILE );
       if( pemfile ) {
-        char *MyBlueMixNetPemChain = nullptr;
+        char *DownloadServerPemChain = nullptr;
         size_t pemSize = pemfile.size();
-        MyBlueMixNetPemChain = (char *)malloc(pemSize);
+        DownloadServerPemChain = (char *)malloc(pemSize);
 
-        if( pemSize != pemfile.readBytes(MyBlueMixNetPemChain, pemSize) ) {
-          Serial.printf("Reading %s pem server certificate chain failed.\r\n",MYBLUEMIX_PEM_FILE);
+        if( pemSize != pemfile.readBytes(DownloadServerPemChain, pemSize) ) {
+          Serial.printf("Reading %s pem server certificate chain failed.\r\n",DOWNLOAD_CERT_PEM_FILE);
         } else {
-          Serial.printf("Read %s pem server certificate chain from SPIFFS\r\n",MYBLUEMIX_PEM_FILE);
-          //Serial.println( MyBlueMixNetPemChain );
+          Serial.printf("Read %s pem server certificate chain from SPIFFS\r\n",DOWNLOAD_CERT_PEM_FILE);
+          //Serial.println( DownloadServerPemChain );
+
+          // Increase the watchdog timer before starting the firmware upgrade
+          // The download and write can trip the watchdog timer and the old firmware
+          // will abort / reset before the new firmware is complete.
+          esp_task_wdt_init(15,0);
 
           Serial.println("Starting OpenEEW OTA firmware upgrade...");
           esp_http_client_config_t config = {0};
           config.url = firmware_ota_url.c_str() ;
-          config.cert_pem = MyBlueMixNetPemChain ;
+          config.cert_pem = DownloadServerPemChain ;
           esp_err_t ret = esp_https_ota(&config);
           if (ret == ESP_OK) {
               Serial.println("OTA upgrade downloaded. Restarting...");
               esp_restart();
           } else {
+              esp_task_wdt_init(5,0);
               Serial.println("The OpenEEW OTA firmware upgrade failed : ESP_FAIL");
           }
         }
-        free( MyBlueMixNetPemChain );
+        free( DownloadServerPemChain );
       } else {
           Serial.println("Failed to open server pem chain.");
       }
