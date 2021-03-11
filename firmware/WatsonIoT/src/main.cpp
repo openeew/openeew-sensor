@@ -17,12 +17,13 @@
 // --------------------------------------------------------------------------------------------
 //        UPDATE CONFIGURATION TO MATCH YOUR ENVIRONMENT
 // --------------------------------------------------------------------------------------------
-#define OPENEEW_ACTIVATION_ENDPOINT "https://openeew-devicemgmt.mybluemix.net/activation?ver=1"
+//#define OPENEEW_ACTIVATION_ENDPOINT "https://openeew-devicemgmt.mybluemix.net/activation?ver=1"
+#define OPENEEW_ACTIVATION_ENDPOINT "https://device-mgmt.openeew.com/activation?ver=1"
 #define OPENEEW_FIRMWARE_VERSION    "1.4.0"
 
 // Run this firmware with a MQTT Broker on a local subnet
 // Comment this Define to send data to the Cloud
-#define MQTT_LOCALBROKER "192.168.1.101"
+//#define MQTT_LOCALBROKER "192.168.1.101"
 
 // Watson IoT connection details
 static char MQTT_HOST[48];            // ORGID.messaging.internetofthings.ibmcloud.com
