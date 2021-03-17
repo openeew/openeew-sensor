@@ -48,8 +48,9 @@ char deviceID[13];
 
 // Store the Download Server PEM and Digicert CA and Root CA in SPIFFS
 // If an OTA firmware upgrade is required, the binary is downloaded from a secure server
-#define DOWNLOAD_CERT_PEM_FILE "/mybluemix-net-chain.pem"
-//#define DOWNLOAD_CERT_PEM_FILE "/github-com-chain.pem"
+#define DOWNLOAD_CERT_PEM_FILE     "/mybluemix-net-chain.pem"
+//#define DOWNLOAD_CERT_PEM_FILE   "/github-com-chain.pem"
+#define WATSON_IOT_PLATFORM_CA_PEM "/messaging.pem"
 
 // Timezone info
 #define TZ_OFFSET -5  // (EST) Hours timezone offset to GMT (without daylight saving time)
@@ -754,6 +755,31 @@ void setup() {
   sprintf(MQTT_HOST,MQTT_LOCALBROKER);  // Enter the IP address of the MQTT broker on your local subnet
 #else
   sprintf(MQTT_HOST,"%s.messaging.internetofthings.ibmcloud.com",MQTT_ORGID);  // Centrally managed
+
+  if( SPIFFS.begin(true) ) {
+    Serial.printf("Opening Watson IoT Root CA PEM Chain : %s\r\n", WATSON_IOT_PLATFORM_CA_PEM);
+    File pemfile = SPIFFS.open( WATSON_IOT_PLATFORM_CA_PEM );
+    if( pemfile ) {
+      char  *RootCAPemChain = nullptr;
+      size_t pemSize = pemfile.size();
+      RootCAPemChain = (char *)malloc(pemSize);
+
+      if( pemSize != pemfile.readBytes(RootCAPemChain, pemSize) ) {
+        Serial.printf("Reading %s pem server certificate chain failed.\r\n",WATSON_IOT_PLATFORM_CA_PEM);
+      } else {
+        Serial.printf("Read %s Root CA server certificate chain\r\n",WATSON_IOT_PLATFORM_CA_PEM);
+        //Serial.println( RootCAPemChain );
+        wifiClient.setCACert(RootCAPemChain);
+      }
+      free( RootCAPemChain );
+    } else {
+        Serial.println("Failed to open server pem chain.");
+    }
+    pemfile.close();
+  } else {
+    Serial.println("An error has occurred while mounting SPIFFS");
+  }
+
 #endif
 
   char mqttparams[100]; // Allocate a buffer large enough for this string ~95 chars
