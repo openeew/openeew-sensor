@@ -505,6 +505,24 @@ void Connect2MQTTbroker() {
 }
 
 
+template<typename L> void loadFromFile(const char* fname, L&& load) {
+  if (SPIFFS.exists(fname)) {
+    File f = SPIFFS.open(fname);
+    load(f, f.size());
+    f.close();
+  }
+}
+
+
+void loadCertificates(WiFiClientSecure* client) {
+  SPIFFS.begin();
+  loadFromFile(WATSON_IOT_PLATFORM_CA_PEM, [client](Stream& stream, size_t size){return client->loadCACert(stream, size);});
+  //loadFromFile("/client.cert.pem", [client](Stream& stream, size_t size){return client->loadCertificate(stream, size);});
+  //loadFromFile("/private.key.pem", [client](Stream& stream, size_t size){return client->loadPrivateKey(stream, size);});
+  SPIFFS.end();
+}
+
+
 void Send10Seconds2Cloud() {
   // DynamicJsonDocument is stored on the heap
   // Allocate a ArduinoJson buffer large enough to 10 seconds of Accelerometer trace data
@@ -756,30 +774,7 @@ void setup() {
 #else
   sprintf(MQTT_HOST,"%s.messaging.internetofthings.ibmcloud.com",MQTT_ORGID);  // Centrally managed
 
-  if( SPIFFS.begin(true) ) {
-    Serial.printf("Opening Watson IoT Root CA PEM Chain : %s\r\n", WATSON_IOT_PLATFORM_CA_PEM);
-    File pemfile = SPIFFS.open( WATSON_IOT_PLATFORM_CA_PEM );
-    if( pemfile ) {
-      char  *RootCAPemChain = nullptr;
-      size_t pemSize = pemfile.size();
-      RootCAPemChain = (char *)malloc(pemSize);
-
-      if( pemSize != pemfile.readBytes(RootCAPemChain, pemSize) ) {
-        Serial.printf("Reading %s pem server certificate chain failed.\r\n",WATSON_IOT_PLATFORM_CA_PEM);
-      } else {
-        Serial.printf("Read %s Root CA server certificate chain\r\n",WATSON_IOT_PLATFORM_CA_PEM);
-        //Serial.println( RootCAPemChain );
-        wifiClient.setCACert(RootCAPemChain);
-      }
-      free( RootCAPemChain );
-    } else {
-        Serial.println("Failed to open server pem chain.");
-    }
-    pemfile.close();
-  } else {
-    Serial.println("An error has occurred while mounting SPIFFS");
-  }
-
+  loadCertificates( &wifiClient );      // Load the Watson IoT messaging.pem CA Cert from SPIFFS
 #endif
 
   char mqttparams[100]; // Allocate a buffer large enough for this string ~95 chars
