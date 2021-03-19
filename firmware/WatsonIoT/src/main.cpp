@@ -208,7 +208,7 @@ void StartADXL355() {
         adxl355.readFifoEntries( (long *)fifoOut ) ;
         bDiscardInitialADXLreadings = false;
       }
-    } 
+    }
     Serial.println("ADXL355 Accelerometer first samples discarded");
   }
   else {
@@ -844,8 +844,6 @@ void loop() {
     if (adxstatus & Adxl355::STATUS_VALUES::FIFO_FULL) {
       int numEntriesFifo = adxl355.readFifoEntries( (long *)fifoOut ) ;
       if ( numEntriesFifo != -1 ) {
-
-
         // Generate an array of json objects that contain x,y,z arrays of 32 floats.
         // [{"x":[],"y":[],"z":[]},{"x":[],"y":[],"z":[]}]
         JsonObject acceleration = traces.createNestedObject();
@@ -981,7 +979,7 @@ void loop() {
         if( bPossibleEarthQuake ) {
           bPossibleEarthQuake=false;
           // Start sending 5 minutes of live accelerometer data
-          numSecsOfAccelReadings = 2 ; // GARETH 300 ;
+          numSecsOfAccelReadings = 300 ;
           // Send the previous 10 seconds of history to the cloud
           Send10Seconds2Cloud();
         }
