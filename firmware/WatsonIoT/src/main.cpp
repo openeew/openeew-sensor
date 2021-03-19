@@ -198,8 +198,18 @@ void StartADXL355() {
     Serial.println("Initializing sensor");
     adxl355.initializeSensor(range, odr_lpf, debug);
     Serial.println("Calibrating sensor");
-    adxl355.calibrateSensor(5, debug);
+    adxl355.calibrateSensor(20, debug); // This has been increased to make traces start closer to zero
     Serial.println("ADXL355 Accelerometer activated");
+
+    bool bDiscardInitialADXLreadings = true ;
+    while( bDiscardInitialADXLreadings ) {
+      adxstatus = adxl355.getStatus();
+      if (adxstatus & Adxl355::STATUS_VALUES::FIFO_FULL) {
+        adxl355.readFifoEntries( (long *)fifoOut ) ;
+        bDiscardInitialADXLreadings = false;
+      }
+    } 
+    Serial.println("ADXL355 Accelerometer first samples discarded");
   }
   else {
     Serial.println("Unable to get accelerometer");
@@ -866,35 +876,29 @@ void loop() {
         // Do some STA / LTA math here...
         // ...
         if( StaLtaQue.isFull() ) {
-          //// find offset
+          /////////////////// find offset ////////////////
           int queCount = StaLtaQue.getCount( );
-          // But why are the first two z samples bad ?
-          // Start from 2 to compensate
-          for (int idx = 2; idx < queCount; idx++) {
+
+          for (int idx = 0; idx < queCount; idx++) {
             AccelReading AccelRecord;
             if( StaLtaQue.peekIdx( &AccelRecord, idx) ) {
               sample[0] = AccelRecord.x;
               sample[1] = AccelRecord.y;
               sample[2] = AccelRecord.z;
-              // But why are the first two z samples bad ?
-              // Serial.printf(".sample[2] = %f ", sample[2]);
               for (int j = 0; j < 3; j++) {
                 sampleSUM[j] += sample[j];
               }
             }
           }
-          // Serial.printf(".offset = ");
           for (int j = 0; j < 3; j++) {
             offset[j]  = sampleSUM[j] / (QUE_len-2);
-            // Serial.printf( " %f ", offset[j]);
           }
-          // Serial.printf("\n");
-
-          //// find lta
+          
+          /////////////////// find lta /////////////////
           sampleSUM[0] = 0;
           sampleSUM[1] = 0;
           sampleSUM[2] = 0;
-          for (int idx = 2; idx < LTA_len; idx++) {
+          for (int idx = 0; idx < LTA_len; idx++) {
             AccelReading AccelRecord;
             if( StaLtaQue.peekIdx( &AccelRecord, idx) ) {
               sampleABS[0] = abs( AccelRecord.x - offset[0] );
@@ -905,13 +909,11 @@ void loop() {
               }
             }
           }
-          // Serial.printf(".sum32abs = ");
           for (int j = 0; j < 3; j++) {
             ltav[j]  = sampleSUM[j] / (LTA_len-2);
-            // Serial.printf( " %f ", sampleSUM[j]);
           }
-
-          //// find sta
+          
+          //////////////////// find sta ///////////////////////
           sampleSUM[0] = 0;
           sampleSUM[1] = 0;
           sampleSUM[2] = 0;
@@ -932,12 +934,13 @@ void loop() {
             if ( bPossibleEarthQuake==false ) {
               if ( stalta[j] >= thresh ) {
                 // Whoa - STA/LTA algorithm detected some anomalous shaking
-                Serial.printf("%f = %f / %f (%i) s0\n", stalta[j], stav[j], ltav[j], j );
+                Serial.printf("STA/LTA = %f = %f / %f (%i)\n", stalta[j], stav[j], ltav[j], j );
+                bPossibleEarthQuake = true ; 
               }
             }
           }
 
-          //// find sta / lta for the other 31 samples but without doing the summing again
+          //// find STA/LTA for the other 31 samples but without doing the summing again
 
           for (int idx = LTA_len+1; idx < QUE_len; idx++) {
             AccelReading AccelRecord;
@@ -966,7 +969,7 @@ void loop() {
               if ( bPossibleEarthQuake==false ) {
                 if ( stalta[j] >= thresh ) {
                   // Whoa - STA/LTA algorithm detected some anomalous shaking
-                  Serial.printf("%f = %f / %f (%i)\n", stalta[j], stav[j], ltav[j], j );
+                  Serial.printf("STA/LTA = %f = %f / %f (%i)\n", stalta[j], stav[j], ltav[j], j );
                   bPossibleEarthQuake = true ;
                 }
               }
