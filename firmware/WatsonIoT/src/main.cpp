@@ -891,7 +891,7 @@ void loop() {
             }
           }
           for (int j = 0; j < 3; j++) {
-            offset[j]  = sampleSUM[j] / (QUE_len-2);
+            offset[j]  = sampleSUM[j] / (QUE_len);
           }
           
           /////////////////// find lta /////////////////
@@ -910,7 +910,7 @@ void loop() {
             }
           }
           for (int j = 0; j < 3; j++) {
-            ltav[j]  = sampleSUM[j] / (LTA_len-2);
+            ltav[j]  = sampleSUM[j] / (LTA_len);
           }
           
           //////////////////// find sta ///////////////////////
@@ -981,7 +981,7 @@ void loop() {
         if( bPossibleEarthQuake ) {
           bPossibleEarthQuake=false;
           // Start sending 5 minutes of live accelerometer data
-          numSecsOfAccelReadings = 300 ;
+          numSecsOfAccelReadings = 2 ; // GARETH 300 ;
           // Send the previous 10 seconds of history to the cloud
           Send10Seconds2Cloud();
         }
