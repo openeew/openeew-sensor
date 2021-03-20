@@ -9,6 +9,7 @@
 #include <Adxl355.h>  // forked from https://github.com/markrad/esp32-ADXL355
 #include <math.h>
 #include <esp_https_ota.h>
+#include <esp_task_wdt.h>
 #include <SPIFFS.h>
 #include "config.h"
 #include "semver.h"  // from https://github.com/h2non/semver.c
@@ -17,14 +18,23 @@
 // --------------------------------------------------------------------------------------------
 //        UPDATE CONFIGURATION TO MATCH YOUR ENVIRONMENT
 // --------------------------------------------------------------------------------------------
-#define OPENEEW_ACTIVATION_ENDPOINT "https://openeew-devicemgmt.mybluemix.net/activation?ver=1"
-#define OPENEEW_FIRMWARE_VERSION    "1.3.0"
+//#define OPENEEW_ACTIVATION_ENDPOINT "https://openeew-devicemgmt.mybluemix.net/activation?ver=1"
+#define OPENEEW_ACTIVATION_ENDPOINT "https://device-mgmt.openeew.com/activation?ver=1"
+#define OPENEEW_FIRMWARE_VERSION    "1.4.0"
+
+// Run this firmware with a MQTT Broker on a local subnet
+// Comment this Define to send data to the Cloud
+//#define MQTT_LOCALBROKER "192.168.1.101"
 
 // Watson IoT connection details
 static char MQTT_HOST[48];            // ORGID.messaging.internetofthings.ibmcloud.com
 static char MQTT_DEVICEID[30];        // Allocate a buffer large enough for "d:orgid:devicetype:deviceid"
 static char MQTT_ORGID[7];            // Watson IoT 6 character orgid
-#define MQTT_PORT        8883         // Secure MQTT 8883 / Insecure MQTT 1833
+#ifdef MQTT_LOCALBROKER
+#define MQTT_PORT        1883         // Secure MQTT 8883 / Insecure MQTT 1883
+#else
+#define MQTT_PORT        8883         // Secure MQTT 8883 / Insecure MQTT 1883
+#endif
 #define MQTT_TOKEN       "OpenEEW-sens0r"   // Watson IoT DeviceId authentication token
 #define MQTT_DEVICETYPE  "OpenEEW"    // Watson IoT DeviceType
 #define MQTT_USER        "use-token-auth"
@@ -36,9 +46,11 @@ static char MQTT_ORGID[7];            // Watson IoT 6 character orgid
 #define MQTT_TOPIC_SENDACCEL  "iot-2/cmd/sendacceldata/fmt/json"
 char deviceID[13];
 
-// Store the .mybluemix.net Server PEM and Digicert CA and Root CA in SPIFFS
+// Store the Download Server PEM and Digicert CA and Root CA in SPIFFS
 // If an OTA firmware upgrade is required, the binary is downloaded from a secure server
-#define MYBLUEMIX_PEM_FILE "/mybluemix-net-chain.pem"
+#define DOWNLOAD_CERT_PEM_FILE     "/mybluemix-net-chain.pem"
+//#define DOWNLOAD_CERT_PEM_FILE   "/github-com-chain.pem"
+#define WATSON_IOT_PLATFORM_CA_PEM "/messaging.pem"
 
 // Timezone info
 #define TZ_OFFSET -5  // (EST) Hours timezone offset to GMT (without daylight saving time)
@@ -46,7 +58,11 @@ char deviceID[13];
 
 // MQTT objects
 void callback(char* topic, byte* payload, unsigned int length);
-WiFiClientSecure wifiClient;
+#ifdef MQTT_LOCALBROKER
+WiFiClient	 wifiClient;    // Insecure MQTT
+#else
+WiFiClientSecure wifiClient;    // Secure MQTT
+#endif
 PubSubClient mqtt(MQTT_HOST, MQTT_PORT, callback, wifiClient);
 
 // Activation
@@ -103,11 +119,11 @@ Adxl355 adxl355(CHIP_SELECT_PIN_ADXL);
 SPIClass *spi1 = NULL;
 
 long fifoOut[32][3];
-long runningAverage[3] = {0, 0, 0};
-long fifoDelta[32][3];
 bool fifoFull = false;
 int  fifoCount = 0;
-int  numValsForAvg = 0;
+int STA_len = 32;    // can change to 125
+int LTA_len = 320;   // can change to 1250
+int QUE_len = LTA_len + STA_len;
 
 // --------------------------------------------------------------------------------------------
 // Variables to hold accelerometer data
@@ -182,8 +198,18 @@ void StartADXL355() {
     Serial.println("Initializing sensor");
     adxl355.initializeSensor(range, odr_lpf, debug);
     Serial.println("Calibrating sensor");
-    adxl355.calibrateSensor(5, debug);
+    adxl355.calibrateSensor(20, debug); // This has been increased to make traces start closer to zero
     Serial.println("ADXL355 Accelerometer activated");
+
+    bool bDiscardInitialADXLreadings = true ;
+    while( bDiscardInitialADXLreadings ) {
+      adxstatus = adxl355.getStatus();
+      if (adxstatus & Adxl355::STATUS_VALUES::FIFO_FULL) {
+        adxl355.readFifoEntries( (long *)fifoOut ) ;
+        bDiscardInitialADXLreadings = false;
+      }
+    }
+    Serial.println("ADXL355 Accelerometer first samples discarded");
   }
   else {
     Serial.println("Unable to get accelerometer");
@@ -314,32 +340,38 @@ bool FirmwareVersionCheck( char *firmware_latest, String firmware_ota_url ) {
     NeoPixelStatus( LED_FIRMWARE_OTA ); // blink magenta
 
     if( SPIFFS.begin(true) ) {
-      Serial.printf("Opening Server PEM Chain : %s\r\n", MYBLUEMIX_PEM_FILE);
-      File pemfile = SPIFFS.open( MYBLUEMIX_PEM_FILE );
+      Serial.printf("Opening Server PEM Chain : %s\r\n", DOWNLOAD_CERT_PEM_FILE);
+      File pemfile = SPIFFS.open( DOWNLOAD_CERT_PEM_FILE );
       if( pemfile ) {
-        char *MyBlueMixNetPemChain = nullptr;
+        char *DownloadServerPemChain = nullptr;
         size_t pemSize = pemfile.size();
-        MyBlueMixNetPemChain = (char *)malloc(pemSize);
+        DownloadServerPemChain = (char *)malloc(pemSize);
 
-        if( pemSize != pemfile.readBytes(MyBlueMixNetPemChain, pemSize) ) {
-          Serial.printf("Reading %s pem server certificate chain failed.\r\n",MYBLUEMIX_PEM_FILE);
+        if( pemSize != pemfile.readBytes(DownloadServerPemChain, pemSize) ) {
+          Serial.printf("Reading %s pem server certificate chain failed.\r\n",DOWNLOAD_CERT_PEM_FILE);
         } else {
-          Serial.printf("Read %s pem server certificate chain from SPIFFS\r\n",MYBLUEMIX_PEM_FILE);
-          //Serial.println( MyBlueMixNetPemChain );
+          Serial.printf("Read %s pem server certificate chain from SPIFFS\r\n",DOWNLOAD_CERT_PEM_FILE);
+          //Serial.println( DownloadServerPemChain );
+
+          // Increase the watchdog timer before starting the firmware upgrade
+          // The download and write can trip the watchdog timer and the old firmware
+          // will abort / reset before the new firmware is complete.
+          esp_task_wdt_init(15,0);
 
           Serial.println("Starting OpenEEW OTA firmware upgrade...");
           esp_http_client_config_t config = {0};
           config.url = firmware_ota_url.c_str() ;
-          config.cert_pem = MyBlueMixNetPemChain ;
+          config.cert_pem = DownloadServerPemChain ;
           esp_err_t ret = esp_https_ota(&config);
           if (ret == ESP_OK) {
               Serial.println("OTA upgrade downloaded. Restarting...");
               esp_restart();
           } else {
+              esp_task_wdt_init(5,0);
               Serial.println("The OpenEEW OTA firmware upgrade failed : ESP_FAIL");
           }
         }
-        free( MyBlueMixNetPemChain );
+        free( DownloadServerPemChain );
       } else {
           Serial.println("Failed to open server pem chain.");
       }
@@ -480,6 +512,24 @@ void Connect2MQTTbroker() {
       delay(5000);
     }
   }
+}
+
+
+template<typename L> void loadFromFile(const char* fname, L&& load) {
+  if (SPIFFS.exists(fname)) {
+    File f = SPIFFS.open(fname);
+    load(f, f.size());
+    f.close();
+  }
+}
+
+
+void loadCertificates(WiFiClientSecure* client) {
+  SPIFFS.begin();
+  loadFromFile(WATSON_IOT_PLATFORM_CA_PEM, [client](Stream& stream, size_t size){return client->loadCACert(stream, size);});
+  //loadFromFile("/client.cert.pem", [client](Stream& stream, size_t size){return client->loadCertificate(stream, size);});
+  //loadFromFile("/private.key.pem", [client](Stream& stream, size_t size){return client->loadPrivateKey(stream, size);});
+  SPIFFS.end();
 }
 
 
@@ -650,7 +700,7 @@ void NetworkEvent(WiFiEvent_t event) {
 // MQTT SSL requires a relatively accurate time between broker and client
 void SetTimeESP32() {
   // Set time from NTP servers
-  configTime(TZ_OFFSET * 3600, TZ_DST * 60, "pool.ntp.org", "0.pool.ntp.org");
+  configTime(TZ_OFFSET * 3600, TZ_DST * 60, "time.nist.gov", "pool.ntp.org");
   Serial.println("\nWaiting for time");
   while(time(nullptr) <= 100000) {
     NeoPixelStatus( LED_FIRMWARE_DFU ); // blink yellow
@@ -729,7 +779,13 @@ void setup() {
   sprintf(MQTT_DEVICEID,"d:%s:%s:%02X%02X%02X%02X%02X%02X",MQTT_ORGID,MQTT_DEVICETYPE,mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
   Serial.println(MQTT_DEVICEID);
 
-  sprintf(MQTT_HOST,"%s.messaging.internetofthings.ibmcloud.com",MQTT_ORGID);
+#ifdef MQTT_LOCALBROKER
+  sprintf(MQTT_HOST,MQTT_LOCALBROKER);  // Enter the IP address of the MQTT broker on your local subnet
+#else
+  sprintf(MQTT_HOST,"%s.messaging.internetofthings.ibmcloud.com",MQTT_ORGID);  // Centrally managed
+
+  loadCertificates( &wifiClient );      // Load the Watson IoT messaging.pem CA Cert from SPIFFS
+#endif
 
   char mqttparams[100]; // Allocate a buffer large enough for this string ~95 chars
   sprintf(mqttparams, "MQTT_USER:%s  MQTT_TOKEN:%s  MQTT_DEVICEID:%s", MQTT_USER, MQTT_TOKEN, MQTT_DEVICEID);
@@ -760,6 +816,20 @@ void setup() {
   digitalWrite(io, LOW); // turn off buzzer
 }
 
+bool  bPossibleEarthQuake      = false;
+double  thresh          = 3.0;
+double    stalta[3]     = { 0, 0, 0 };
+double    sample[3]     = { 0, 0, 0 };
+double    sampleSUM[3]  = { 0, 0, 0 };
+double        ltSUM[3]  = { 0, 0, 0 };
+double    sample1[3]    = { 0, 0, 0 };
+double LTAsample1[3]    = { 0, 0, 0 };
+double     offset[3]    = { 0, 0, 0 };
+double  sampleABS[3]    = { 0, 0, 0 };
+double sample1ABS       = 0;
+double LTAsample1ABS    = 0;
+double       stav[3]    = { 0, 0, 0 };
+double       ltav[3]    = { 0, 0, 0 };
 
 void loop() {
   mqtt.loop();
@@ -774,24 +844,6 @@ void loop() {
     if (adxstatus & Adxl355::STATUS_VALUES::FIFO_FULL) {
       int numEntriesFifo = adxl355.readFifoEntries( (long *)fifoOut ) ;
       if ( numEntriesFifo != -1 ) {
-        long sumFifo[3];
-        sumFifo[0] = 0;
-        sumFifo[1] = 0;
-        sumFifo[2] = 0;
-
-        for (int i = 0; i < 32; i++) {
-          for (int j = 0; j < 3; j++) {
-            fifoDelta[i][j] = fifoOut[i][j] - runningAverage[j];
-            sumFifo[j] += fifoOut[i][j];
-          }
-        }
-
-        for (int j = 0; j < 3; j++) {
-          runningAverage[j] = (numValsForAvg * runningAverage[j] + sumFifo[j]) / (numValsForAvg + 32);
-        }
-
-        numValsForAvg = min(numValsForAvg + 32, 2000);
-
         // Generate an array of json objects that contain x,y,z arrays of 32 floats.
         // [{"x":[],"y":[],"z":[]},{"x":[],"y":[],"z":[]}]
         JsonObject acceleration = traces.createNestedObject();
@@ -801,17 +853,17 @@ void loop() {
         double x, y, z;
         for (int i = 0; i < numEntriesFifo; i++) {
           AccelReading AccelRecord;
-          gal = adxl355.valueToGals(fifoDelta[i][0]);
+          gal = adxl355.valueToGals(fifoOut[i][0]);
           x = round(gal*1000)/1000;
           acceleration["x"].add(x);
           AccelRecord.x = x;
 
-          gal = adxl355.valueToGals(fifoDelta[i][1]);
+          gal = adxl355.valueToGals(fifoOut[i][1]);
           y = round(gal*1000)/1000;
           acceleration["y"].add(y);
           AccelRecord.y = y;
 
-          gal = adxl355.valueToGals(fifoDelta[i][2]);
+          gal = adxl355.valueToGals(fifoOut[i][2]);
           z = round(gal*1000)/1000;
           acceleration["z"].add(z);
           AccelRecord.z = z;
@@ -821,9 +873,111 @@ void loop() {
 
         // Do some STA / LTA math here...
         // ...
-        // Whoa - STA/LTA algorithm detected some anomalous shaking
-        bool bPossibleEarthQuake = false ;
+        if( StaLtaQue.isFull() ) {
+          /////////////////// find offset ////////////////
+          int queCount = StaLtaQue.getCount( );
+
+          for (int idx = 0; idx < queCount; idx++) {
+            AccelReading AccelRecord;
+            if( StaLtaQue.peekIdx( &AccelRecord, idx) ) {
+              sample[0] = AccelRecord.x;
+              sample[1] = AccelRecord.y;
+              sample[2] = AccelRecord.z;
+              for (int j = 0; j < 3; j++) {
+                sampleSUM[j] += sample[j];
+              }
+            }
+          }
+          for (int j = 0; j < 3; j++) {
+            offset[j]  = sampleSUM[j] / (QUE_len);
+          }
+          
+          /////////////////// find lta /////////////////
+          sampleSUM[0] = 0;
+          sampleSUM[1] = 0;
+          sampleSUM[2] = 0;
+          for (int idx = 0; idx < LTA_len; idx++) {
+            AccelReading AccelRecord;
+            if( StaLtaQue.peekIdx( &AccelRecord, idx) ) {
+              sampleABS[0] = abs( AccelRecord.x - offset[0] );
+              sampleABS[1] = abs( AccelRecord.y - offset[1] );
+              sampleABS[2] = abs( AccelRecord.z - offset[2] );
+              for (int j = 0; j < 3; j++) {
+                sampleSUM[j] += sampleABS[j];
+              }
+            }
+          }
+          for (int j = 0; j < 3; j++) {
+            ltav[j]  = sampleSUM[j] / (LTA_len);
+          }
+          
+          //////////////////// find sta ///////////////////////
+          sampleSUM[0] = 0;
+          sampleSUM[1] = 0;
+          sampleSUM[2] = 0;
+          for (int idx = LTA_len-STA_len ; idx < LTA_len; idx++) {
+            AccelReading AccelRecord;
+            if( StaLtaQue.peekIdx( &AccelRecord, idx) ) {
+              sampleABS[0] = abs( AccelRecord.x - offset[0] );
+              sampleABS[1] = abs( AccelRecord.y - offset[1] );
+              sampleABS[2] = abs( AccelRecord.z - offset[2] );
+              for (int j = 0; j < 3; j++) {
+                sampleSUM[j] += sampleABS[j];
+              }
+            }
+          }
+          for (int j = 0; j < 3; j++) {
+            stav[j]    = sampleSUM[j] / STA_len;
+            stalta[j]  =      stav[j] / ltav[j];
+            if ( bPossibleEarthQuake==false ) {
+              if ( stalta[j] >= thresh ) {
+                // Whoa - STA/LTA algorithm detected some anomalous shaking
+                Serial.printf("STA/LTA = %f = %f / %f (%i)\n", stalta[j], stav[j], ltav[j], j );
+                bPossibleEarthQuake = true ; 
+              }
+            }
+          }
+
+          //// find STA/LTA for the other 31 samples but without doing the summing again
+
+          for (int idx = LTA_len+1; idx < QUE_len; idx++) {
+            AccelReading AccelRecord;
+            if( StaLtaQue.peekIdx( &AccelRecord, idx) ) {
+              sample[0] = AccelRecord.x;
+              sample[1] = AccelRecord.y;
+              sample[2] = AccelRecord.z;
+            }
+            if( StaLtaQue.peekIdx( &AccelRecord, idx-STA_len) ) {
+              sample1[0] = AccelRecord.x;
+              sample1[1] = AccelRecord.y;
+              sample1[2] = AccelRecord.z;
+            }
+            if( StaLtaQue.peekIdx( &AccelRecord, idx-LTA_len) ) {
+              LTAsample1[0] = AccelRecord.x;
+              LTAsample1[1] = AccelRecord.y;
+              LTAsample1[2] = AccelRecord.z;
+            }
+            for (int j = 0; j < 3; j++) {
+              sampleABS[j]  = abs(sample[j]     - offset[j]);
+              sample1ABS    = abs(sample1[j]    - offset[j]);
+              LTAsample1ABS = abs(LTAsample1[j] - offset[j]);
+              stav[j]   += ( sampleABS[j] - sample1ABS)    /  STA_len;
+              ltav[j]   += ( sampleABS[j] - LTAsample1ABS) /  LTA_len;
+              stalta[j]  = stav[j] / ltav[j];
+              if ( bPossibleEarthQuake==false ) {
+                if ( stalta[j] >= thresh ) {
+                  // Whoa - STA/LTA algorithm detected some anomalous shaking
+                  Serial.printf("STA/LTA = %f = %f / %f (%i)\n", stalta[j], stav[j], ltav[j], j );
+                  bPossibleEarthQuake = true ;
+                }
+              }
+            }
+          }
+        }
+
+        // If STA/LTA algorithm detected some anomalous shaking
         if( bPossibleEarthQuake ) {
+          bPossibleEarthQuake=false;
           // Start sending 5 minutes of live accelerometer data
           numSecsOfAccelReadings = 300 ;
           // Send the previous 10 seconds of history to the cloud
@@ -845,15 +999,16 @@ void loop() {
         // Clear & Reset JsonArrays
         jsonTraces.clear();
         traces = jsonTraces.to<JsonArray>();
-        
+
         //Switch the direction of the LEDs
-        breathedirection = breathedirection ? false : true;       
+        breathedirection = breathedirection ? false : true;
       }
     }
   }
+
   if( adxstatus )
     NeoPixelBreathe();
-  
+
   delay(10);
 }
 
@@ -1092,7 +1247,7 @@ void NeoPixelStatus( int status ) {
 
 
 void NeoPixelBreathe() {
-  if( breatheintensity < 0) 
+  if( breatheintensity < 0)
     breatheintensity = 0;
   strip.setBrightness( breatheintensity );  // slow breathe the LED
   // Serial.printf("Brightness is %d\n",breatheintensity);
