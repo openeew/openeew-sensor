@@ -1,7 +1,9 @@
 # OpenEEW Sensor
 The OpenEEW sensor features a high performance MEMS accelerometer and Ethernet or WiFi connectivity. It includes also a loud buzzer and 3 bright Neopixel LEDS for alarm functions. By including alarm functions, the owners of the locations where they are installed are more likely to value and look after the device.
 
-The OpenEEW sensor has already shown itself to be [as good as seismometers that cost 60x more](https://openeew.com/blog/sensor-benchmark).
+The OpenEEW sensor has already shown itself to be [as good as seismometers that cost 60x more](https://openeew.com/blog/sensor-benchmark) for the purpose of earthquake early-warnings.
+
+The sensor can be readily [bought from Grillo](https://grillo.io/product/openeew-node/), or made following these instructions.
 
 ## Hardware
 
