@@ -26,29 +26,20 @@ Please note the following pins:
 
 ## Enclosure
 
-You can [3d print yourself a sturdy wall mounted enclosure](/enclosure/) for your PCB using the 3d files. This design features snap lip joints to make it easy to assemble, and flanged base for a sturdy connection to the wall surface. Here you can find a variant that includes a housing for a small [bubble level](https://www.aliexpress.com/item/33023021109.html?spm=a2g0o.productlist.0.0.40315dfczmp3OU&algo_pvid=bdb50c5f-6bba-4c9a-ac95-6905622008cf&algo_expid=bdb50c5f-6bba-4c9a-ac95-6905622008cf-27&btsid=0ab6fb8315990954564341733e9ba2&ws_ab_test=searchweb0_0,searchweb201602_,searchweb201603_) that will help with installation.
+You can [3d print yourself a sturdy wall mounted enclosure](https://www.thingiverse.com/thing:4854991) for your PCB using the 3d files. This design features snap lip joints to make it easy to assemble, and flanged base for a sturdy connection to the wall surface. 
 
-![3d printed case v1.0](/images/openeew-node-withlid.jpg)
+<img src="/images/openeew-node-withlid.jpg" width="300">
+<img src="/images/openeew-node-blue.jpg" width="300">
+<img src="/images/animated-box.gif" width="300">
 
-![3d printed case v1.0](/images/openeew-node-blue.jpg)
-
-![3d printed case v1.0](/images/animated-box.gif)
-
-
-Alternatively you can buy a case that fits the board dimensions ([such as this](https://www.aliexpress.com/item/4000337012320.html?spm=a2g0o.detail.1000014.19.36fa34d16GPRAR&gps-id=pcDetailBottomMoreOtherSeller&scm=1007.14976.157518.0&scm_id=1007.14976.157518.0&scm-url=1007.14976.157518.0&pvid=d8255fa0-4728-41cd-be64-fe030910cf37&_t=gps-id:pcDetailBottomMoreOtherSeller,scm-url:1007.14976.157518.0,pvid:d8255fa0-4728-41cd-be64-fe030910cf37,tpp_buckets:668%230%23131923%2312_668%23808%236395%23432_668%23888%233325%233_4976%230%23157518%230_4976%232711%237538%23458_4976%233223%2310328%231_4976%233104%239653%235_4976%233141%239887%239_668%232846%238107%2326_668%232717%237564%23644_668%233164%239976%23121)), although it will require modifications to allow for ethernet and power jacks.
 
 ## Firmware
-[This code](https://github.com/openeew/openeew-sensor/tree/master/firmware) allows an ESP32 device to send 3 axis accelerometer readings to a remote MQTT endpoint from its accelerometer to an MQTT endpoint. Optionally it also allows an attached NEO-6m GPS module to attach accurate time via the PPS signal (Pulse Per Second).
-
-For more details please review the [firmware instructions](https://github.com/openeew/openeew-sensor/blob/master/firmware/README.md).
-
-Learn more about using [MQTT to communicate with the firmware](FIRMWARE.md) 
-
-### Contributors
+The firmware now has its [own repo](https://github.com/openeew/openeew-firmware).
 
 <a href="https://github.com/openeew/openeew-sensor/graphs/contributors">
   <img src="https://contributors-img.web.app/image?repo=openeew/openeew-sensor" />
 </a>
+
 ___
 
 Enjoy! Give us [feedback](https://github.com/openeew/openeew-sensor/issues) if you have suggestions on how to improve this information.
