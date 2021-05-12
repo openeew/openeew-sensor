@@ -1,44 +1,36 @@
 # OpenEEW Sensor
-The OpenEEW sensor features a high performance MEMS accelerometer and Ethernet or WiFi connectivity. It includes also a loud buzzer and 3 bright Neopixel LEDS for alarm functions. By including alarm functions, the owners of the locations where they are installed are more likely to value and look after the device.
+The OpenEEW sensor has already shown itself to be [as good as seismometers](https://openeew.com/blog/sensor-benchmark) for the purpose of earthquake early-warnings (EEW). EEWs are concerned only with strong shaking and so expensive broadband seismometers are not necessary for detection.
 
-The OpenEEW sensor has already shown itself to be [as good as seismometers that cost 60x more](https://openeew.com/blog/sensor-benchmark) for the purpose of earthquake early-warnings.
+This hardware design has been created to drastically reduce the cost of a seismometer through the usage of off-the-shelf parts. The key component is the ADXL355 MEMS accelerometer, which has far lower noise than other accelerometers on the market. This low noise allows it to detect earthquakes at further distances.
 
-The sensor can be readily [bought from Grillo](https://grillo.io/product/openeew-node/), or made following these instructions.
+The sensor can be bought from [PCBWay](#), [Grillo](https://grillo.io/product/openeew-node/), or made following these instructions.
 
 ## Hardware
+The PCB features the following:
+- A high performance MEMS accelerometer
+- ESP-32-WROOM-32 which features a dual-core processor, 240MHz frequency, 4MB Flahs, and 8MB PSRAM
+- Ethernet connector and controller to provide more stable internet connections that need to last for years in some installations
+- 3 Neopixel RBG LEDs and a buzzer to provide alarm functions when an alert message is received on the device
 
-Components are mounted in a PCB with the corresponding circuitry. The board operates at 3.3V with a maximum current of 1A. The accelerometer is accessed via SPI interface, specifically ESP32's HSPI. For this device we have selected the ADXL355 accelerometer for its low noise and relatively low cost.
+![PCB](https://user-images.githubusercontent.com/6279965/118044476-4dd2c380-b33c-11eb-8baa-c089b383fa31.PNG)
+[Schematic here](/pcb/openeew-schematic.pdf)
 
-The ethernet uses the LAN8720A transceiver. We have not included PoE in this varient to reduce complexity and cost, but this may be a good option for some.
+The board operates at 3.3V with a minimum current of 0.5A. The accelerometer is accessed via the ESP32's HSPI interface.
 
-GPS can optionally be added with a UART interface.
+The ethernet uses the LAN8720A transceiver. We have not included PoE in this varient to reduce complexity and cost.
+
+GPS can optionally be added via the UART header, and I2C devices can be added via the I2C header.
 
 You can find the schematics, PCB, and BOM files in [here](/pcb). The board was generated using [Kicad](https://kicad-pcb.org/).
-
-The assembled sensor, enclosure, and power supply, can also be bought directly [here](https://grillo.io/product/openeew-node/).
-
-![PCB](images/openeew-node-board.jpg)
 
 Please note the following pins:
 - ADXL355 > SPI (HSPI) > CS GPIO 15
 - Neopixel data pin> GPIO 16
 - Buzzer > GPIO 32
 
-## Enclosure
-
-You can [3d print yourself a sturdy wall mounted enclosure](https://www.thingiverse.com/thing:4854991) for your PCB using the 3d files. This design features snap lip joints to make it easy to assemble, and flanged base for a sturdy connection to the wall surface. 
-
 <img src="/images/openeew-node-withlid.jpg" width="300">
 <img src="/images/openeew-node-blue.jpg" width="300">
 <img src="/images/animated-box.gif" width="300">
-
-
-## Firmware
-The firmware now has its [own repo](https://github.com/openeew/openeew-firmware).
-
-<a href="https://github.com/openeew/openeew-sensor/graphs/contributors">
-  <img src="https://contributors-img.web.app/image?repo=openeew/openeew-sensor" />
-</a>
 
 ___
 
