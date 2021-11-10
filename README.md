@@ -28,7 +28,7 @@ The ethernet uses the LAN8720A transceiver. We have not included PoE in this var
 GPS can optionally be added via the UART header, and I2C devices can be added via the I2C header. However we have opted to use NTP as a default for timekeeping, and we use the OpenEEW app to record latitude and longitude when provisioning the device.
 
 ### Information
-You can find the schematics, PCB, and BOM files in [here](/pcb). The board was generated using [Kicad](https://kicad-pcb.org/).
+You can find the schematics, PCB, and BOM files in [here](/pcb). The board was generated using [Kicad](https://kicad.org/).
 
 <img src="/images/openeew-node-withlid.jpg" width="300">
 <img src="/images/openeew-node-blue.jpg" width="300">
